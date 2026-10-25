@@ -32,6 +32,13 @@ This project prices those odds. Each chapter takes one way a life can unfold and
 
 Every chapter uses all four tools, each with its own job.
 
+```mermaid
+flowchart LR
+    SQL["SQL<br/>experience data"] -->|"estimates and A/E"| R["R<br/>tested engine"]
+    R -->|"results"| APP["Shiny<br/>calculator"]
+    R <-->|"matches to the cent"| XL["Excel<br/>independent rebuild"]
+```
+
 | | R: the engine | SQL: where the odds come from | Excel: a second opinion | Shiny: the calculator |
 |---|---|---|---|---|
 | **1. Detours** | Kolmogorov equations, annuities, premiums | Transition intensities estimated from time spent in each state | Euler and closed-form rebuild, matches R to the cent | Disability & death tab |
