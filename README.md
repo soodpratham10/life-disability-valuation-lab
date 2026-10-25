@@ -189,7 +189,7 @@ Lapses remove people before they reach the expensive later years, so the expecte
 $$
 \hat{q}^{(j)}_k = \frac{d^{(j)}_k}{l_k},
 \qquad
-\frac{A}{E} = \frac{\sum_k d^{(j)}_k}{\sum_k l_k\, q^{(j)}_k}
+\frac{A}{E} = \frac{\sum_k d^{(j)}_k}{\sum_k l_k q^{(j)}_k}
 $$
 
 Against the assumptions used to price the policy:
