@@ -20,8 +20,8 @@ This project prices those odds. Each chapter takes one way a life can unfold, bu
 |---|---|---|---|---|
 | 1 | **Detours** | Life doesn't go in a straight line | Multiple state models (healthy, disabled, dead) | Done |
 | 2 | **Exits** | Everyone leaves eventually, but how? | Multiple decrement models (death, lapse) | Done |
-| 3 | **Two Lives** | A promise made to a couple | Multiple life models (joint life, last survivor) | Next |
-| 4 | **The Long Wait** | Decades of saving for the years after work | Pension mathematics | Planned |
+| 3 | **Two Lives** | A promise made to a couple | Multiple life models (joint life, last survivor) | Done |
+| 4 | **The Long Wait** | Decades of saving for the years after work | Pension mathematics | Next |
 | 5 | **The Reckoning** | Did the promise pay off for the insurer? | Profit testing and analysis of surplus | Planned |
 | 6 | **Room to Move** | A promise that bends | Universal life | Planned |
 | 7 | **The Fine Print** | Guarantees that cost more than they look | Embedded options | Planned |
@@ -191,11 +191,78 @@ A multiple decrement model is a multiple state model with one starting state. A 
 
 ---
 
+## Chapter 3: Two Lives
+
+*A couple retires on a promise: an income while both are alive, and part of it for whoever survives. How long each lives, and which one goes first, sets the cost.*
+
+### What the engine does
+
+- **Joint-life and last-survivor statuses**: survival, annuities and insurances on the first and second death
+- **Reversionary annuities**: income to one life only after the other has died
+- **Contingent probabilities**: the chance that one life dies before the other
+- **Expected time to first and last death** under constant forces
+- **Makeham mortality** with the parameters of the SOA Standard Ultimate Life Table
+
+### The mathematics
+
+For independent lives, the joint-life status survives while both are alive, and the last-survivor status while at least one is:
+
+$$
+{}_kp_{xy} = {}_kp_x\,{}_kp_y,
+\qquad
+{}_kp_{\overline{xy}} = {}_kp_x + {}_kp_y - {}_kp_{xy}
+$$
+
+Annuities paid at the start of each year while the status survives satisfy
+
+$$
+\ddot{a}_{xy} + \ddot{a}_{\overline{xy}} = \ddot{a}_x + \ddot{a}_y
+$$
+
+An income to $(y)$ only after $(x)$ has died is a reversionary annuity:
+
+$$
+\ddot{a}_{x|y} = \ddot{a}_y - \ddot{a}_{xy}
+$$
+
+A joint and survivor pension pays $A$ while both are alive and a share $s$ of it to the survivor:
+
+$$
+\text{EPV} = A\big(s\,\ddot{a}_{\overline{xy}} + (1-s)\,\ddot{a}_{xy}\big)
+$$
+
+The probability that $(x)$ dies before $(y)$ within $n$ years, with deaths uniformly distributed over each year of age:
+
+$$
+{}_nq_{\overset{1}{x}y} = \sum_{k=0}^{n-1} {}_kp_{xy}\; q_{x+k}\Big(1 - \tfrac{1}{2}q_{y+k}\Big)
+$$
+
+Mortality follows Makeham's law, $\mu_x = A + Bc^x$, with $A = 0.00022$, $B = 2.7 \times 10^{-6}$ and $c = 1.124$.
+
+### What the calculator shows
+
+A couple aged 65 and 62, an income of $20,000 a year, 60% to the survivor, and 5% interest:
+
+| | Cost today |
+|---|---|
+| Joint and survivor pension (60%) | $286,717 |
+| Income continues in full to the survivor | $316,151 |
+| Income stops at the first death | $242,566 |
+| Income to the younger life only after the older one dies | $45,155 |
+
+The probability that the 65-year-old dies first is 58.6%. The single-life annuity factor at age 65 is 13.5498, which matches the published SOA Standard Ultimate Life Table value at 5%.
+
+### Three chapters, one model
+
+Two lives are also a multiple state model, with states *both alive*, *only one alive* and *both dead*. A test checks that the Chapter 1 Kolmogorov solver reproduces the joint-life and last-survivor probabilities.
+
+---
+
 ## How correctness is checked
 
-1. **Automated tests** (`tests/`, 55 checks): expected values worked out by hand or derived as closed-form formulas before the code is written
+1. **Automated tests** (`tests/`, 71 checks): expected values worked out by hand or derived as closed-form formulas before the code is written
 2. **Excel rebuild** (`excel/`): the same calculations in spreadsheet formulas, matching R to the cent
-3. **Exact answers**: numerical results compared with closed forms, so the size of the numerical error is known
+3. **Exact answers and published tables**: numerical results compared with closed forms and the SOA Standard Ultimate Life Table, so the size of the numerical error is known
 
 ## A note on assumptions
 
@@ -210,6 +277,7 @@ install.packages(c("testthat", "DBI", "RSQLite", "shiny"))
 testthat::test_file("tests/test_multistate.R")
 testthat::test_file("tests/test_experience.R")
 testthat::test_file("tests/test_decrement.R")
+testthat::test_file("tests/test_multilife.R")
 
 # Build the experience database (the file is not stored in the repository)
 source("r/multistate.R"); source("r/experience.R")
@@ -231,6 +299,7 @@ shiny::runApp("app")
 | 1. Detours | `r/multistate.R` | `kstep_probs()`, `kolmogorov_path()`, `euler_kolmogorov()`, `epv_annuity()`, `epv_insurance()`, `equivalence_premium()` |
 | 1. Where the odds come from | `r/experience.R`, `sql/` | `simulate_experience()`, `write_experience_db()`, `query_experience()`, `estimate_intensities()` |
 | 2. Exits | `r/decrement.R` | `decrement_table()`, `udd_single_to_multiple()`, `udd_multiple_to_single()`, `md_epv_benefits()`, `md_premium()` |
+| 3. Two Lives | `r/multilife.R` | `joint_survival()`, `last_survivor_survival()`, `joint_annuity()`, `last_survivor_annuity()`, `reversionary_annuity()`, `contingent_first()`, `makeham_q()` |
 
 ## Repository layout
 
