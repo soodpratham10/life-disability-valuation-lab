@@ -65,37 +65,37 @@ $$
 Kolmogorov's forward equations: the probability of being in state $j$ grows with flow in and shrinks with flow out.
 
 $$
-\frac{d}{dt}\,{}_tp_x^{ij} = \sum_{k \neq j} \Big( {}_tp_x^{ik}\,\mu_{x+t}^{kj} - {}_tp_x^{ij}\,\mu_{x+t}^{jk} \Big)
+\frac{d}{dt}{}_tp_x^{ij} = \sum_{k \neq j} \Big( {}_tp_x^{ik}\mu_{x+t}^{kj} - {}_tp_x^{ij}\mu_{x+t}^{jk} \Big)
 $$
 
 These are solved with Euler's method, using the generator matrix $\mathbf{Q}$ (intensities off the diagonal, minus the row sums on it):
 
 $$
-\mathbf{P}(t+h) \approx \mathbf{P}(t) + h\,\mathbf{P}(t)\,\mathbf{Q}(t)
+\mathbf{P}(t+h) \approx \mathbf{P}(t) + h\mathbf{P}(t)\mathbf{Q}(t)
 $$
 
 Annuity while in state $j$, and insurance on entry into state $j$, over $n$ years at force of interest $\delta$:
 
 $$
-\bar{a}_{x:\overline{n}|}^{\,ij} = \int_0^n e^{-\delta t}\; {}_tp_x^{ij}\; dt
+\bar{a}_{x:\overline{n}|}^{ij} = \int_0^n e^{-\delta t} {}_tp_x^{ij} dt
 $$
 
 $$
-\bar{A}_{x:\overline{n}|}^{\,ij} = \int_0^n e^{-\delta t} \sum_{k \neq j} {}_tp_x^{ik}\,\mu_{x+t}^{kj}\; dt
+\bar{A}_{x:\overline{n}|}^{ij} = \int_0^n e^{-\delta t} \sum_{k \neq j} {}_tp_x^{ik}\mu_{x+t}^{kj} dt
 $$
 
 Premium paid while healthy, for $D$ per year while disabled and $B$ on death:
 
 $$
-P = \frac{D\,\bar{a}_{x:\overline{n}|}^{\,01} + B\,\bar{A}_{x:\overline{n}|}^{\,02}}{\bar{a}_{x:\overline{n}|}^{\,00}}
+P = \frac{D\bar{a}_{x:\overline{n}|}^{01} + B\bar{A}_{x:\overline{n}|}^{02}}{\bar{a}_{x:\overline{n}|}^{00}}
 $$
 
 For constant intensities there are exact answers, which the tests and the Excel workbook compare against:
 
 $$
-{}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})\,t},
+{}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})t},
 \qquad
-{}_tp_x^{01} = \frac{\mu^{01}}{\mu^{12}-\mu^{01}-\mu^{02}}\Big(e^{-(\mu^{01}+\mu^{02})\,t} - e^{-\mu^{12}\,t}\Big)
+{}_tp_x^{01} = \frac{\mu^{01}}{\mu^{12}-\mu^{01}-\mu^{02}}\Big(e^{-(\mu^{01}+\mu^{02})t} - e^{-\mu^{12}t}\Big)
 $$
 
 ### Where the odds come from
@@ -156,7 +156,7 @@ $$
 If each decrement is uniformly distributed over the year in its own single decrement table, the dependent rates follow from the independent ones:
 
 $$
-q^{(j)}_x = q^{\prime(j)}_x \int_0^1 \prod_{k \neq j} \big(1 - t\,q^{\prime(k)}_x\big)\, dt
+q^{(j)}_x = q^{\prime(j)}_x \int_0^1 \prod_{k \neq j} \big(1 - tq^{\prime(k)}_x\big) dt
 $$
 
 which for two decrements is $q^{(1)} = q^{\prime(1)}\big(1 - \tfrac{1}{2}q^{\prime(2)}\big)$. If instead decrements are uniform in the multiple decrement table:
@@ -168,9 +168,9 @@ $$
 Benefits $b^{(j)}$ paid at the end of the year of exit, and premiums paid at the start of each year while in force:
 
 $$
-\text{EPV} = \sum_{k=0}^{n-1} v^{k+1}\, {}_kp^{(\tau)}_x \sum_j b^{(j)}\, q^{(j)}_{x+k},
+\text{EPV} = \sum_{k=0}^{n-1} v^{k+1} {}_kp^{(\tau)}_x \sum_j b^{(j)} q^{(j)}_{x+k},
 \qquad
-\ddot{a} = \sum_{k=0}^{n-1} v^{k}\, {}_kp^{(\tau)}_x
+\ddot{a} = \sum_{k=0}^{n-1} v^{k} {}_kp^{(\tau)}_x
 $$
 
 ### What the calculator shows
