@@ -8,6 +8,7 @@ find_file <- function(...) {
 source(find_file("r", "multistate.R"))
 source(find_file("r", "experience.R"))
 source(find_file("r", "decrement.R"))
+source(find_file("r", "multilife.R"))
 
 # If the experience database exists, estimate intensities from it
 est <- NULL
@@ -99,10 +100,40 @@ tab_lapse <- tabPanel("Chapter 2: Exits",
                       )
 )
 
+# ---------- Chapter 3: Two Lives (multiple life model) ----------
+tab_couple <- tabPanel("Chapter 3: Two Lives",
+                       sidebarLayout(
+                         sidebarPanel(
+                           h4("The couple"),
+                           sliderInput("tl_x", "Age of first life (x)", min = 50, max = 85, value = 65, step = 1),
+                           sliderInput("tl_y", "Age of second life (y)", min = 50, max = 85, value = 62, step = 1),
+                           h4("The pension"),
+                           numericInput("tl_amt", "Annual income (paid at the start of each year)",
+                                        value = 20000, min = 0, step = 1000),
+                           sliderInput("tl_share", "Survivor's share after the first death", min = 0, max = 1,
+                                       value = 0.6, step = 0.05),
+                           sliderInput("tl_i", "Annual interest rate", min = 0, max = 0.10,
+                                       value = 0.05, step = 0.005)
+                         ),
+                         mainPanel(
+                           p(em("A couple retires on a promise: an income while both are alive, and part of it
+            for whoever survives. Their lifetimes, and which one goes first, set the cost.")),
+                           h3("Results"),
+                           tableOutput("tl_results"),
+                           h3("What happens to the couple over time"),
+                           plotOutput("tl_plot", height = "350px"),
+                           p(em("Both lives follow Makeham mortality with the parameters of the SOA Standard
+            Ultimate Life Table, and their future lifetimes are assumed independent.
+            Annuities are paid at the start of each year, up to age 120 for the younger life.")),
+                           note
+                         )
+                       )
+)
+
 ui <- fluidPage(
   titlePanel("The Odds of a Lifetime", windowTitle = "The Odds of a Lifetime"),
   p(em("One policy, every way a life can unfold.")),
-  tabsetPanel(tab_disability, tab_lapse)
+  tabsetPanel(tab_disability, tab_lapse, tab_couple)
 )
 
 server <- function(input, output, session) {
@@ -207,6 +238,55 @@ server <- function(input, output, session) {
             xlab = "Policy year", ylab = "Number of policies (out of 1,000)")
     legend("right", legend = c("Still in force", "Cumulative deaths", "Cumulative lapses"),
            col = c("#2a9d8f", "#e76f51", "#457b9d"), lty = 1, lwd = 2)
+  })
+  
+  # ----- Chapter 3 -----
+  tl <- reactive({
+    n <- 120 - min(input$tl_x, input$tl_y)
+    qx <- makeham_q(input$tl_x, n)
+    qy <- makeham_q(input$tl_y, n)
+    i <- input$tl_i
+    a_x  <- annuity_due_status(survival_curve(qx), i)
+    a_y  <- annuity_due_status(survival_curve(qy), i)
+    a_xy <- joint_annuity(qx, qy, i)
+    a_ls <- last_survivor_annuity(qx, qy, i)
+    list(qx = qx, qy = qy, n = n,
+         a_x = a_x, a_y = a_y, a_xy = a_xy, a_ls = a_ls,
+         rev = reversionary_annuity(qx, qy, i),
+         p_x_first = contingent_first(qx, qy))
+  })
+  
+  output$tl_results <- renderTable({
+    r <- tl()
+    amt <- input$tl_amt
+    s <- input$tl_share
+    data.frame(
+      Item = c("Cost of a joint and survivor pension",
+               "Cost if income continues in full to the survivor",
+               "Cost if income stops at the first death",
+               "Cost of income to (y) only after (x) dies",
+               "Probability that (x) dies first",
+               "Annuity factors: x, y, joint, last survivor"),
+      Value = c(money(amt * (s * r$a_ls + (1 - s) * r$a_xy)),
+                money(amt * r$a_ls),
+                money(amt * r$a_xy),
+                money(amt * r$rev),
+                sprintf("%.1f%%", 100 * r$p_x_first),
+                sprintf("%.4f, %.4f, %.4f, %.4f", r$a_x, r$a_y, r$a_xy, r$a_ls))
+    )
+  })
+  
+  output$tl_plot <- renderPlot({
+    r <- tl()
+    both <- joint_survival(r$qx, r$qy)
+    any  <- last_survivor_survival(r$qx, r$qy)
+    yrs <- 0:r$n
+    lines <- cbind(both, any - both, 1 - any)
+    matplot(yrs, lines, type = "l", lty = 1, lwd = 2,
+            col = c("#2a9d8f", "#e9c46a", "#e76f51"), ylim = c(0, 1),
+            xlab = "Years from now", ylab = "Probability")
+    legend("right", legend = c("Both alive", "One alive", "Both dead"),
+           col = c("#2a9d8f", "#e9c46a", "#e76f51"), lty = 1, lwd = 2)
   })
 }
 
