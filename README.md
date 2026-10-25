@@ -1,6 +1,6 @@
 # Actuarial Models Lab (R)
 
-An R toolkit that implements life contingencies models from first principles, verifies every function against hand-derived answers, and puts an interactive calculator on top.
+An R toolkit that implements life contingencies models from first principles and verifies every function against hand-derived answers. SQL, Excel and an interactive calculator are planned on top of the same engine.
 
 ## What this project is about
 
@@ -17,7 +17,16 @@ The project follows one story from start to finish:
 3. **What actually happened?** Profit testing and analysis of surplus show whether a product made money and which assumption (interest, mortality, expenses, lapses) drove the result.
 4. **Modern products.** Universal life and embedded options show how flexible accounts and guarantees change the risk.
 
-Everything runs on one tested engine, and the calculator gains a tab as each module is added.
+## Tools
+
+| Tool | Role | Status |
+|---|---|---|
+| R | Model engine and automated tests | In use |
+| SQL (SQLite) | Synthetic experience data: policyholders, time spent in each state, transitions between states | Planned |
+| Excel | Assumptions workbook, plus an independent spreadsheet rebuild of key calculations to cross-check the R results | Planned |
+| Shiny | Interactive calculator, one tab per module | Next |
+
+The planned pipeline is: experience data in SQL, intensities estimated and models run in R, assumptions and cross-checks in Excel, results explored in the calculator.
 
 ## What works today (Module 1: multiple state models)
 
@@ -49,7 +58,7 @@ Notation follows Dickson, Hardy and Waters, *Actuarial Mathematics for Life Cont
 
 ### States and transition probabilities
 
-A policyholder moves between a finite set of states (for example healthy, disabled, dead). The probability of being in state $j$ at age $x+t$ given state $i$ at age $x$ is
+A policyholder moves between a finite set of states (for example healthy, disabled, dead). The probability of being in state $j$ at age $x+t$, given state $i$ at age $x$, is
 
 $$
 {}_tp_x^{ij} = \Pr\big[\text{in state } j \text{ at age } x+t \mid \text{in state } i \text{ at age } x\big]
@@ -64,16 +73,26 @@ $$
 ### Kolmogorov's forward equations
 
 $$
-\frac{d}{dt}\,{}_tp_x^{ij} = \sum_{k \neq j} \Big( {}_tp_x^{ik}\,\mu_{x+t}^{kj} - {}_tp_x^{ij}\,\mu_{x+t}^{jk} \Big), \qquad {}_0p_x^{ii} = 1, \quad {}_0p_x^{ij} = 0 \;\; (j \neq i)
+\frac{d}{dt}\,{}_tp_x^{ij} = \sum_{k \neq j} \Big( {}_tp_x^{ik}\,\mu_{x+t}^{kj} - {}_tp_x^{ij}\,\mu_{x+t}^{jk} \Big)
 $$
 
-In words: the probability of being in $j$ grows with flow in from other states and shrinks with flow out of $j$. These equations have no closed form for general intensities, so they are solved numerically with Euler's method. In matrix form, with step size $h$,
+with starting values
+
+$$
+{}_0p_x^{ii} = 1, \qquad {}_0p_x^{ij} = 0 \quad (j \neq i)
+$$
+
+In words: the probability of being in state $j$ grows with flow in from other states and shrinks with flow out of $j$. These equations have no closed form for general intensities, so they are solved numerically with Euler's method. In matrix form, with step size $h$,
 
 $$
 \mathbf{P}(t+h) \approx \mathbf{P}(t) + h\,\mathbf{P}(t)\,\mathbf{Q}(t)
 $$
 
-where $Q_{ij} = \mu_{x+t}^{ij}$ for $i \neq j$ and $Q_{ii} = -\sum_{j \neq i} \mu_{x+t}^{ij}$.
+where the generator matrix has off-diagonal entries equal to the intensities and diagonal entries equal to minus the row sums:
+
+$$
+Q_{ij} = \mu_{x+t}^{ij} \;\; (i \neq j), \qquad Q_{ii} = -\sum_{j \neq i} \mu_{x+t}^{ij}
+$$
 
 ### Annuities and insurances by state
 
@@ -97,18 +116,29 @@ Under the equivalence principle, the level premium rate $P$ paid while healthy s
 
 $$
 P \cdot \bar{a}_{x:\overline{n}|}^{\,00} = \text{EPV of benefits}
-\quad\Longrightarrow\quad
+$$
+
+so that
+
+$$
 P = \frac{\text{EPV of benefits}}{\bar{a}_{x:\overline{n}|}^{\,00}}
 $$
 
-For a policy paying $D$ per year while disabled and $B$ on death, the EPV of benefits is $D\,\bar{a}^{\,01}_{x:\overline{n}|} + B\,\bar{A}^{\,02}_{x:\overline{n}|}$.
+For a policy paying $D$ per year while disabled and $B$ on death, the EPV of benefits is
+
+$$
+D\,\bar{a}_{x:\overline{n}|}^{\,01} + B\,\bar{A}_{x:\overline{n}|}^{\,02}
+$$
 
 ### A closed-form check
 
 For constant intensities in the three-state permanent disability model, the probabilities have exact solutions, which is what the tests compare the numerical solver against:
 
 $$
-{}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})\,t}, \qquad
+{}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})\,t}
+$$
+
+$$
 {}_tp_x^{01} = \frac{\mu^{01}}{\mu^{12}-\mu^{01}-\mu^{02}}\Big(e^{-(\mu^{01}+\mu^{02})\,t} - e^{-\mu^{12}\,t}\Big)
 $$
 
@@ -116,38 +146,28 @@ $$
 
 | Formula | Function |
 |---|---|
-| $k$-step transition probabilities | `kstep_probs()` |
-| Generator matrix $\mathbf{Q}$ | `make_generator()` |
+| k-step transition probabilities | `kstep_probs()` |
+| Generator matrix | `make_generator()` |
 | Forward equations by Euler's method | `kolmogorov_path()`, `euler_kolmogorov()` |
-| $\bar{a}^{\,ij}$ | `epv_annuity()` |
-| $\bar{A}^{\,ij}$ | `epv_insurance()` |
+| Annuity by state | `epv_annuity()` |
+| Insurance on entry to a state | `epv_insurance()` |
 | Equivalence-principle premium | `equivalence_premium()` |
-
-## The calculator
-
-A Shiny app in `app/` wraps the engine. In its first version it has one tab, **Disability & Death**. You set the transition intensities, interest rate, policy term and benefits, and it shows the annual premium, the expected present value of each benefit, and a chart of the probability of being healthy, disabled or dead over time.
-
-```r
-install.packages("shiny")
-shiny::runApp("app")
-```
-
-Further tabs will be added as modules are completed.
 
 ## How correctness is checked
 
-Every function has automated tests (`tests/`). Expected values are worked out by hand before the code is written, or derived as closed-form formulas, and the numerical results must match. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, and annuities over all states required to add up to a certain annuity.
+Every function has automated tests (`tests/`). Expected values are worked out by hand before the code is written, or derived as closed-form formulas, and the numerical results must match. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, annuities over all states required to add up to a certain annuity, and premiums checked against closed-form values.
 
 ## Important note on assumptions
 
-The transition intensities used in the examples, tests and calculator are illustrative numbers chosen so results can be checked. They are **not calibrated to real data** and are not a pricing basis.
+The transition intensities used in the examples and tests are illustrative numbers chosen so results can be checked. They are **not calibrated to real data** and are not a pricing basis.
 
 ## Roadmap
 
 | Module | Topic | Status |
 |---|---|---|
 | 1 | Multiple state models, annuities, insurances, premiums | Done |
-| Calculator | Disability & Death tab | v1 |
+| Calculator | Shiny app, Disability & Death tab | Next |
+| Data layer | SQL experience data, estimating transition intensities from it, Excel assumptions and cross-check workbook | Planned |
 | 2 | Multiple decrement models (death, lapse, cause-specific benefits) | Planned |
 | 3 | Multiple life models (joint life, last survivor, contingent) | Planned |
 | 4 | Profit testing and analysis of surplus by source | Planned |
@@ -160,10 +180,9 @@ The transition intensities used in the examples, tests and calculator are illust
 ```
 r/          model functions (one file per module)
 tests/      automated tests with hand-checked expected values
-app/        Shiny calculator
-docs/       write-ups of assumptions and method
-outputs/    charts and tables
 ```
+
+Folders for the app, SQL, Excel and documentation will be added as those parts are built.
 
 ## Running the tests
 
