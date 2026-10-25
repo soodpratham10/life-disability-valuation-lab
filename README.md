@@ -10,7 +10,7 @@ Someone signs an insurance policy today. In return for a premium, an insurer mak
 
 Then life happens. They might fall ill and recover, or not. They might stop paying and walk away. They might share the promise with a partner, retire on it, or count on a guarantee buried in the fine print. Every one of those paths has odds, and every path costs something.
 
-This project prices those odds. Each chapter takes one way a life can unfold, builds the actuarial model for it from first principles, checks it against hand-derived answers, and turns it into an interactive calculator. Together they answer one question:
+This project prices those odds. Each chapter takes one way a life can unfold and tells it the same way: build the actuarial model from first principles, check it against hand-derived answers, test it against experience data in SQL, rebuild it independently in Excel, and turn it into an interactive calculator. Together the chapters answer one question:
 
 > Once a promise is sold, how much must the insurer hold to keep it, and why did the result differ from what was expected?
 
@@ -26,16 +26,15 @@ This project prices those odds. Each chapter takes one way a life can unfold, bu
 | 6 | **Room to Move** | A promise that bends | Universal life | Planned |
 | 7 | **The Fine Print** | Guarantees that cost more than they look | Embedded options | Planned |
 
-Each chapter adds a tab to the calculator, built on the same tested engine.
+## The toolkit, chapter by chapter
 
-## The toolkit
+Every chapter uses all four tools, each with its own job.
 
-| Tool | Role |
-|---|---|
-| R | The engine: every model, built from first principles, with automated tests |
-| SQL (SQLite) | Where the odds come from: experience data on time spent in each state and transitions between states |
-| Excel | A second opinion: an independent rebuild of the calculations in spreadsheet formulas |
-| Shiny | The calculator: one tab per chapter |
+| | R: the engine | SQL: where the odds come from | Excel: a second opinion | Shiny: the calculator |
+|---|---|---|---|---|
+| **1. Detours** | Kolmogorov equations, annuities, premiums | Transition intensities estimated from time spent in each state | Euler and closed-form rebuild, matches R to the cent | Disability & death tab |
+| **2. Exits** | Decrement tables, UDD conversions, premiums | Death and lapse experience study, actual vs expected | Decrement table and premium rebuild, matches R to the cent | Death & lapse tab |
+| **3. Two Lives** | Joint-life, last-survivor and reversionary annuities | Couples study: who is alive, and who died first | Life table and annuity rebuild, matches R and the SOA table | Couples tab |
 
 ---
 
@@ -98,11 +97,9 @@ $$
 {}_tp_x^{01} = \frac{\mu^{01}}{\mu^{12}-\mu^{01}-\mu^{02}}\Big(e^{-(\mu^{01}+\mu^{02})t} - e^{-\mu^{12}t}\Big)
 $$
 
-### Where the odds come from
+### Where the odds come from (SQL)
 
-The intensities don't have to be typed in. They can be estimated from experience.
-
-Synthetic policyholders are simulated moving between states, stored in SQLite as one row per spell (a stretch of time in one state), and summarised with SQL. With $D^{ij}$ transitions from $i$ to $j$ and $T^{i}$ total years spent in state $i$:
+Synthetic policyholders are simulated moving between states and stored in SQLite as one row per spell (a stretch of time in one state). With $D^{ij}$ transitions from $i$ to $j$ and $T^{i}$ total years spent in state $i$:
 
 $$
 \hat{\mu}^{ij} = \frac{D^{ij}}{T^{i}},
@@ -120,7 +117,7 @@ $$
 
 The calculator can load these estimates with one click.
 
-### A second opinion
+### A second opinion (Excel)
 
 `excel/disability_death_crosscheck.xlsx` rebuilds Chapter 1 in spreadsheet formulas only: an Euler sheet, a closed-form sheet, and an experience sheet that re-estimates the intensities from the SQL results. R and Excel agree to the cent, and both are within 0.03% of the exact answer (the gap is the Euler step error):
 
@@ -184,6 +181,29 @@ A 20-year term policy with a $250,000 death benefit, mortality starting at 0.002
 | Effect of lapses | −14.3% |
 
 Lapses remove people before they reach the expensive later years, so the expected lapses lower the premium. This is **lapse-supported pricing**, and it is a real risk: if fewer people lapse than assumed, the insurer has undercharged.
+
+### Where the exits come from (SQL)
+
+50,000 simulated policies are stored in SQLite, one row per policy with the year it ended and why. `sql/exit_study.sql` counts, for each policy year, the policies in force at the start and the deaths and lapses during the year. The estimated rates and the actual-to-expected ratio are
+
+$$
+\hat{q}^{(j)}_k = \frac{d^{(j)}_k}{l_k},
+\qquad
+\frac{A}{E} = \frac{\sum_k d^{(j)}_k}{\sum_k l_k\, q^{(j)}_k}
+$$
+
+Against the assumptions used to price the policy:
+
+| Decrement | Actual | Expected | A/E |
+|---|---|---|---|
+| Death | 2,277 | 2,310 | 98.6% |
+| Lapse | 31,970 | 32,259 | 99.1% |
+
+The calculator recomputes A/E live as the assumption sliders move, and plots the observed lapse rate in each policy year against the assumption, so a mis-set assumption shows up straight away.
+
+### A second opinion (Excel)
+
+`excel/exits_crosscheck.xlsx` rebuilds the decrement table and both premiums in spreadsheet formulas, and re-runs the experience study from the SQL results. It matches R to the cent ($816.86, $953.62, $6,935.63, annuity factor 8.4906) and gives the same A/E ratios.
 
 ### The two chapters are one model
 
@@ -252,6 +272,22 @@ A couple aged 65 and 62, an income of $20,000 a year, 60% to the survivor, and 5
 
 The probability that the 65-year-old dies first is 58.6%. The single-life annuity factor at age 65 is 13.5498, which matches the published SOA Standard Ultimate Life Table value at 5%.
 
+### Who is still here (SQL)
+
+20,000 simulated couples aged 65 and 62 are followed for 30 years and stored in SQLite, one row per couple with the time each partner died. `sql/couple_study.sql` counts, for each year, the couples with both partners alive, the couples with at least one alive, and which partner died first. The data tracks the model closely:
+
+| Measure | Observed | Model |
+|---|---|---|
+| Both alive after 10 years | 83.6% | 83.6% |
+| Both alive after 20 years | 47.3% | 47.5% |
+| At least one alive after 20 years | 90.6% | 90.6% |
+| At least one alive after 29 years | 55.4% | 55.3% |
+| The 65-year-old dies first within 30 years | 53.7% | 54.0% |
+
+### A second opinion (Excel)
+
+`excel/two_lives_crosscheck.xlsx` builds the couple's life table from the Makeham formula in spreadsheet cells, then the joint-life, last-survivor and reversionary annuities. It matches R to the cent for every cost and to four decimals for every annuity factor, reproduces the SOA table value of 13.5498 at age 65, and re-runs the couples study from the SQL results.
+
 ### Three chapters, one model
 
 Two lives are also a multiple state model, with states *both alive*, *only one alive* and *both dead*. A test checks that the Chapter 1 Kolmogorov solver reproduces the joint-life and last-survivor probabilities.
@@ -260,13 +296,14 @@ Two lives are also a multiple state model, with states *both alive*, *only one a
 
 ## How correctness is checked
 
-1. **Automated tests** (`tests/`, 71 checks): expected values worked out by hand or derived as closed-form formulas before the code is written
-2. **Excel rebuild** (`excel/`): the same calculations in spreadsheet formulas, matching R to the cent
-3. **Exact answers and published tables**: numerical results compared with closed forms and the SOA Standard Ultimate Life Table, so the size of the numerical error is known
+1. **Automated tests** (`tests/`, 89 checks): expected values worked out by hand or derived as closed-form formulas before the code is written, including the SQL queries on small hand-built databases
+2. **Experience data** (`sql/`): every chapter's model is tested against simulated experience, and the data recovers the assumptions
+3. **Excel rebuilds** (`excel/`): every chapter's calculations implemented separately in spreadsheet formulas, matching R to the cent
+4. **Exact answers and published tables**: numerical results compared with closed forms and the SOA Standard Ultimate Life Table
 
 ## A note on assumptions
 
-The rates in the examples, tests, workbook and calculator are illustrative, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
+The rates in the examples, tests, workbooks and calculator are illustrative, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
 
 ## Getting started
 
@@ -280,13 +317,26 @@ testthat::test_file("tests/test_decrement.R")
 testthat::test_file("tests/test_multilife.R")
 
 # Build the experience database (the file is not stored in the repository)
-source("r/multistate.R"); source("r/experience.R")
+source("r/multistate.R"); source("r/decrement.R")
+source("r/multilife.R"); source("r/experience.R")
+db <- "sql/experience.sqlite"
+
+# Chapter 1: lives moving between healthy, disabled and dead
 mu_true <- matrix(c(0, 0.10, 0.05,
                     0, 0,    0.20,
                     0, 0,    0), nrow = 3, byrow = TRUE)
 spells <- simulate_experience(mu_true, n = 20000, obs_years = 5, seed = 2026)
-con <- write_experience_db(spells, "sql/experience.sqlite")
-DBI::dbDisconnect(con)
+DBI::dbDisconnect(write_experience_db(spells, db))
+
+# Chapter 2: term policies that die or lapse
+k <- 0:19
+q_true <- udd_single_to_multiple(cbind(0.002 * 1.08^k, ifelse(k == 0, 0.10, 0.05)))
+DBI::dbDisconnect(write_policy_db(simulate_policies(q_true, n = 50000, seed = 2026), db))
+
+# Chapter 3: couples aged 65 and 62
+qx <- makeham_q(65, 30); qy <- makeham_q(62, 30)
+couples <- simulate_couples(qx, qy, n = 20000, seed = 2026, age_x = 65, age_y = 62)
+DBI::dbDisconnect(write_couple_db(couples, db))
 
 # Open the calculator
 shiny::runApp("app")
@@ -294,19 +344,18 @@ shiny::runApp("app")
 
 ## How the pieces map to code
 
-| Chapter | File | Key functions |
-|---|---|---|
-| 1. Detours | `r/multistate.R` | `kstep_probs()`, `kolmogorov_path()`, `euler_kolmogorov()`, `epv_annuity()`, `epv_insurance()`, `equivalence_premium()` |
-| 1. Where the odds come from | `r/experience.R`, `sql/` | `simulate_experience()`, `write_experience_db()`, `query_experience()`, `estimate_intensities()` |
-| 2. Exits | `r/decrement.R` | `decrement_table()`, `udd_single_to_multiple()`, `udd_multiple_to_single()`, `md_epv_benefits()`, `md_premium()` |
-| 3. Two Lives | `r/multilife.R` | `joint_survival()`, `last_survivor_survival()`, `joint_annuity()`, `last_survivor_annuity()`, `reversionary_annuity()`, `contingent_first()`, `makeham_q()` |
+| Chapter | Engine | Experience data | Excel |
+|---|---|---|---|
+| 1. Detours | `r/multistate.R`: `kolmogorov_path()`, `epv_annuity()`, `epv_insurance()`, `equivalence_premium()` | `r/experience.R`, `sql/schema.sql`, `sql/exposure.sql`, `sql/transitions.sql`: `simulate_experience()`, `estimate_intensities()` | `excel/disability_death_crosscheck.xlsx` |
+| 2. Exits | `r/decrement.R`: `decrement_table()`, `udd_single_to_multiple()`, `udd_multiple_to_single()`, `md_premium()` | `r/experience.R`, `sql/policy_schema.sql`, `sql/exit_study.sql`: `simulate_policies()`, `estimate_decrement_rates()`, `actual_vs_expected()` | `excel/exits_crosscheck.xlsx` |
+| 3. Two Lives | `r/multilife.R`: `joint_annuity()`, `last_survivor_annuity()`, `reversionary_annuity()`, `contingent_first()`, `makeham_q()` | `r/experience.R`, `sql/couple_schema.sql`, `sql/couple_study.sql`: `simulate_couples()`, `compare_couples()` | `excel/two_lives_crosscheck.xlsx` |
 
 ## Repository layout
 
 ```
-r/          the engine, one file per chapter
-sql/        database schema and SQL queries
-excel/      independent cross-check workbook
+r/          the engine, one file per chapter, plus the experience-data functions
+sql/        database schemas and experience-study queries
+excel/      one independent cross-check workbook per chapter
 tests/      automated tests with hand-checked expected values
 app/        the calculator
 docs/       images and write-ups
