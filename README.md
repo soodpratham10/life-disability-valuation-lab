@@ -4,6 +4,8 @@
 
 ![Tests](https://img.shields.io/badge/tests-89%20passing-brightgreen) ![Chapters](https://img.shields.io/badge/chapters-3%20of%207-blue) ![R](https://img.shields.io/badge/R-engine-276DC3?logo=r&logoColor=white) ![SQLite](https://img.shields.io/badge/SQLite-experience%20data-003B57?logo=sqlite&logoColor=white) ![Excel](https://img.shields.io/badge/Excel-cross--checks-217346) ![Shiny](https://img.shields.io/badge/Shiny-calculator-447099) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+**[▶ Try the live calculator](https://soodpratham10.shinyapps.io/odds-of-a-lifetime/)** (no installation needed)
+
 ![The Odds of a Lifetime calculator](docs/calculator.png)
 
 ## Prologue
