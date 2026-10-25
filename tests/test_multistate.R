@@ -55,3 +55,29 @@ test_that("a function of time with constant intensities gives the same answer", 
   P2 <- euler_kolmogorov(function(s) mu, t = 1, h = 0.5)
   expect_equal(P1, P2)
 })
+
+delta <- 0.06
+
+test_that("annuities over all states add up to a certain annuity", {
+  total <- sum(sapply(1:3, function(j) epv_annuity(mu, 1, j, n = 20, delta)))
+  expect_equal(total, (1 - exp(-delta * 20)) / delta, tolerance = 1e-6)
+})
+
+test_that("healthy-to-healthy annuity matches the closed form", {
+  # a00 = (1 - exp(-(mu01 + mu02 + delta) n)) / (mu01 + mu02 + delta)
+  exact <- (1 - exp(-0.21 * 20)) / 0.21
+  expect_equal(epv_annuity(mu, 1, 1, n = 20, delta), exact, tolerance = 2e-3)
+})
+
+test_that("healthy-to-disabled annuity matches the closed form", {
+  exact <- 2 * ((1 - exp(-0.21 * 20)) / 0.21 - (1 - exp(-0.26 * 20)) / 0.26)
+  expect_equal(epv_annuity(mu, 1, 2, n = 20, delta), exact, tolerance = 2e-3)
+})
+
+test_that("insurance on entry to the dead state matches the closed form", {
+  # A02 = mu02 * a00 + mu12 * a01
+  a00 <- (1 - exp(-0.21 * 20)) / 0.21
+  a01 <- 2 * ((1 - exp(-0.21 * 20)) / 0.21 - (1 - exp(-0.26 * 20)) / 0.26)
+  expect_equal(epv_insurance(mu, 1, 3, n = 20, delta),
+               0.05 * a00 + 0.20 * a01, tolerance = 2e-3)
+})
