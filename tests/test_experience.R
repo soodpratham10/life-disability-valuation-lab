@@ -1,4 +1,5 @@
 library(testthat)
+source("../r/multilife.R")
 source("../r/experience.R")
 
 # ===================== Chapter 1 =====================
@@ -89,4 +90,42 @@ test_that("simulated policies recover the true decrement rates", {
   ae <- actual_vs_expected(study, q_true)
   expect_equal(ae$ae_ratio[1], 1, tolerance = 0.10)
   expect_equal(ae$ae_ratio[2], 1, tolerance = 0.05)
+})
+
+# ===================== Chapter 3 =====================
+
+test_that("couples study SQL on a hand-built group of couples", {
+  # 4 couples observed for 2 years (times are years from now; NA = still alive):
+  #   1: x dies at 0.5, y alive          -> x dies first in year 1
+  #   2: x dies at 1.5, y dies at 0.7    -> y dies first in year 1
+  #   3: both alive
+  #   4: x dies at 1.2, y dies at 1.8    -> x dies first in year 2
+  couples <- data.frame(
+    couple_id    = 1:4,
+    age_x        = NA,
+    age_y        = NA,
+    obs_years    = 2,
+    death_time_x = c(0.5, 1.5, NA, 1.2),
+    death_time_y = c(NA, 0.7, NA, 1.8))
+  con <- write_couple_db(couples, ":memory:")
+  study <- query_couple_study(con)
+  DBI::dbDisconnect(con)
+  expect_equal(study$both_alive, c(4, 2))           # start of year 2: couples 3 and 4
+  expect_equal(study$at_least_one_alive, c(4, 4))   # every couple still has someone at time 1
+  expect_equal(study$x_dies_first, c(1, 1))
+  expect_equal(study$y_dies_first, c(1, 0))
+})
+
+test_that("simulated couples match the joint-life and last-survivor model", {
+  qx <- rep(0.02, 20)
+  qy <- rep(0.03, 20)
+  couples <- simulate_couples(qx, qy, n = 20000, seed = 2026)
+  con <- write_couple_db(couples, ":memory:")
+  study <- query_couple_study(con)
+  DBI::dbDisconnect(con)
+  cmp <- compare_couples(study, qx, qy)
+  expect_equal(cmp$both_alive_observed[20], cmp$both_alive_model[20], tolerance = 0.05)
+  expect_equal(cmp$any_alive_observed[20], cmp$any_alive_model[20], tolerance = 0.05)
+  expect_equal(sum(study$x_dies_first) / 20000, contingent_first(qx, qy), tolerance = 0.05)
+  expect_equal(sum(study$y_dies_first) / 20000, contingent_first(qy, qx), tolerance = 0.05)
 })

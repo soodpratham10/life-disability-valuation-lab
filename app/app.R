@@ -6,23 +6,26 @@ find_file <- function(...) {
   NA
 }
 source(find_file("r", "multistate.R"))
-source(find_file("r", "experience.R"))
 source(find_file("r", "decrement.R"))
 source(find_file("r", "multilife.R"))
+source(find_file("r", "experience.R"))
 
 # Load experience data from SQLite, if the database has been built
-est <- NULL     # Chapter 1: estimated intensities
-study <- NULL   # Chapter 2: exit study by policy year
+est <- NULL            # Chapter 1: estimated intensities
+study <- NULL          # Chapter 2: exit study by policy year
+couple_study <- NULL   # Chapter 3: couples study by year
 db_path <- find_file("sql", "experience.sqlite")
 if (!is.na(db_path)) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
   tabs <- DBI::dbListTables(con)
   if ("spell" %in% tabs)  est <- estimate_intensities(query_experience(con), 3)
   if ("policy" %in% tabs) study <- estimate_decrement_rates(query_exit_study(con))
+  if ("couple" %in% tabs) couple_study <- query_couple_study(con)
   DBI::dbDisconnect(con)
 }
 
 money <- function(x) paste0("$", formatC(x, format = "f", big.mark = ",", digits = 2))
+pct <- function(x) sprintf("%.1f%%", 100 * x)
 note <- p(em("Illustrative assumptions only. Not calibrated to real data and not a pricing basis."))
 
 # ---------- Chapter 1: Detours (multiple state model) ----------
@@ -133,6 +136,14 @@ tab_couple <- tabPanel("Chapter 3: Two Lives",
                            tableOutput("tl_results"),
                            h3("What happens to the couple over time"),
                            plotOutput("tl_plot", height = "350px"),
+                           if (!is.null(couple_study)) tagList(
+                             h3("Couples experience study (SQLite): observed vs model"),
+                             p(em("20,000 simulated couples aged 65 and 62, followed for 30 years and counted in SQL,
+              compared with the model at the ages currently set on the sliders. At 65 and 62
+              the model should match the data; other ages show how far a wrong assumption drifts.")),
+                             tableOutput("tl_study_table"),
+                             plotOutput("tl_study_plot", height = "300px")
+                           ),
                            p(em("Both lives follow Makeham mortality with the parameters of the SOA Standard
             Ultimate Life Table, and their future lifetimes are assumed independent.
             Annuities are paid at the start of each year, up to age 120 for the younger life.")),
@@ -261,7 +272,7 @@ server <- function(input, output, session) {
         Decrement = ae$decrement,
         Actual = formatC(ae$actual, format = "d", big.mark = ","),
         Expected = formatC(ae$expected, format = "f", digits = 0, big.mark = ","),
-        `A/E` = sprintf("%.1f%%", 100 * ae$ae_ratio),
+        `A/E` = pct(ae$ae_ratio),
         check.names = FALSE
       )
     })
@@ -312,7 +323,7 @@ server <- function(input, output, session) {
                 money(amt * r$a_ls),
                 money(amt * r$a_xy),
                 money(amt * r$rev),
-                sprintf("%.1f%%", 100 * r$p_x_first),
+                pct(r$p_x_first),
                 sprintf("%.4f, %.4f, %.4f, %.4f", r$a_x, r$a_y, r$a_xy, r$a_ls))
     )
   })
@@ -329,6 +340,50 @@ server <- function(input, output, session) {
     legend("right", legend = c("Both alive", "One alive", "Both dead"),
            col = c("#2a9d8f", "#e9c46a", "#e76f51"), lty = 1, lwd = 2)
   })
+  
+  if (!is.null(couple_study)) {
+    obs_years <- nrow(couple_study)
+    n0 <- couple_study$both_alive[1]
+    
+    # Model at the slider ages, over the same years as the study
+    tl_cmp <- reactive({
+      qx <- makeham_q(input$tl_x, obs_years)
+      qy <- makeham_q(input$tl_y, obs_years)
+      list(cmp = compare_couples(couple_study, qx, qy),
+           x_first_model = contingent_first(qx, qy))
+    })
+    
+    output$tl_study_table <- renderTable({
+      r <- tl_cmp()
+      cmp <- r$cmp
+      rows <- c(11, 21, obs_years)
+      data.frame(
+        Measure = c(sprintf("Both alive after %d years", rows - 1),
+                    sprintf("At least one alive after %d years", rows - 1),
+                    sprintf("(x) dies first within %d years", obs_years)),
+        Observed = c(pct(cmp$both_alive_observed[rows]),
+                     pct(cmp$any_alive_observed[rows]),
+                     pct(sum(couple_study$x_dies_first) / n0)),
+        Model = c(pct(cmp$both_alive_model[rows]),
+                  pct(cmp$any_alive_model[rows]),
+                  pct(r$x_first_model))
+      )
+    })
+    
+    output$tl_study_plot <- renderPlot({
+      cmp <- tl_cmp()$cmp
+      t <- cmp$year - 1
+      plot(t, cmp$both_alive_observed, pch = 19, col = "#2a9d8f", ylim = c(0, 1),
+           xlab = "Years from now", ylab = "Proportion of couples")
+      points(t, cmp$any_alive_observed, pch = 19, col = "#e9c46a")
+      lines(t, cmp$both_alive_model, lwd = 2, col = "#2a9d8f")
+      lines(t, cmp$any_alive_model, lwd = 2, col = "#e9c46a")
+      legend("bottomleft",
+             legend = c("Both alive: observed (dots), model (line)",
+                        "At least one alive: observed (dots), model (line)"),
+             col = c("#2a9d8f", "#e9c46a"), pch = 19, lwd = 2)
+    })
+  }
 }
 
 shinyApp(ui, server)

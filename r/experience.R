@@ -136,3 +136,60 @@ actual_vs_expected <- function(study, q) {
     ae_ratio  = c(sum(study$deaths) / exp_deaths, sum(study$lapses) / exp_lapses)
   )
 }
+
+# ===================== Chapter 3: Two Lives =====================
+# (compare_couples() uses joint_survival() and last_survivor_survival()
+#  from r/multilife.R, so source that file too.)
+
+# Time of death, in years from now, for n lives with one-year death rates q.
+# Deaths are spread uniformly within the year. NA means still alive at the end.
+simulate_death_times <- function(q, n) {
+  t <- rep(NA_real_, n)
+  alive <- rep(TRUE, n)
+  for (k in seq_along(q)) {
+    idx <- which(alive)
+    d <- runif(length(idx)) < q[k]
+    t[idx[d]] <- k - 1 + runif(sum(d))
+    alive[idx[d]] <- FALSE
+  }
+  t
+}
+
+# Simulate n couples with independent lifetimes, observed for length(qx) years
+simulate_couples <- function(qx, qy, n, seed = NULL, age_x = NA, age_y = NA) {
+  stopifnot(length(qx) == length(qy))
+  if (!is.null(seed)) set.seed(seed)
+  data.frame(couple_id    = seq_len(n),
+             age_x        = age_x,
+             age_y        = age_y,
+             obs_years    = length(qx),
+             death_time_x = simulate_death_times(qx, n),
+             death_time_y = simulate_death_times(qy, n))
+}
+
+# Create the SQLite table of couples. Returns the connection.
+write_couple_db <- function(couples, path = ":memory:") {
+  con <- DBI::dbConnect(RSQLite::SQLite(), path)
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS couple")
+  DBI::dbExecute(con, read_sql("couple_schema.sql"))
+  DBI::dbWriteTable(con, "couple", couples, append = TRUE)
+  con
+}
+
+# Run the couples study query: both alive, at least one alive, who died first, by year
+query_couple_study <- function(con) {
+  DBI::dbGetQuery(con, read_sql("couple_study.sql"))
+}
+
+# Observed proportions at the start of each year vs the joint-life and last-survivor model
+compare_couples <- function(study, qx, qy) {
+  n0 <- study$both_alive[1]
+  k <- study$year
+  data.frame(
+    year                = k,
+    both_alive_observed = study$both_alive / n0,
+    both_alive_model    = joint_survival(qx, qy)[k],
+    any_alive_observed  = study$at_least_one_alive / n0,
+    any_alive_model     = last_survivor_survival(qx, qy)[k]
+  )
+}
