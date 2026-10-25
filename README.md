@@ -1,6 +1,6 @@
 # Actuarial Models Lab (R)
 
-An R toolkit that implements life contingencies models from first principles, verifies every function against hand-derived answers, estimates its assumptions from experience data stored in SQL, and puts an interactive calculator on top.
+An R toolkit that implements life contingencies models from first principles, verifies every function against hand-derived answers, estimates its assumptions from experience data stored in SQL, cross-checks its results in Excel, and puts an interactive calculator on top.
 
 ![Disability & Death Policy Calculator](docs/calculator.png)
 
@@ -25,10 +25,10 @@ The project follows one story from start to finish:
 |---|---|---|
 | R | Model engine and automated tests | In use |
 | SQL (SQLite) | Experience data: time spent in each state and transitions between states, aggregated with SQL queries | In use |
+| Excel | Assumptions and an independent rebuild of the calculations in spreadsheet formulas, to cross-check the R results | In use |
 | Shiny | Interactive calculator, one tab per module | v1 |
-| Excel | Assumptions workbook, plus an independent spreadsheet rebuild of key calculations to cross-check the R results | Planned |
 
-The pipeline: simulated experience data is stored in SQLite, SQL queries aggregate it, R estimates the transition intensities and runs the models, and the calculator shows the results.
+The pipeline: simulated experience data is stored in SQLite, SQL queries aggregate it, R estimates the transition intensities and runs the models, Excel independently reproduces the results, and the calculator shows them.
 
 ## What works today
 
@@ -46,7 +46,29 @@ The pipeline: simulated experience data is stored in SQLite, SQL queries aggrega
 - **SQL queries** (`sql/`): total exposure in each state and the number of each type of transition
 - **Estimation**: occurrence-exposure estimates of each intensity with standard errors and 95% intervals
 
-With 20,000 simulated lives observed for 5 years, the estimates land close to the truth, for example 0.1001 against a true 0.10 for healthy to disabled, and 0.0512 against 0.05 for death while healthy, with the true values inside the 95% intervals.
+With 20,000 simulated lives observed for 5 years, the estimates land close to the truth, and every true value falls inside its 95% interval:
+
+| Transition | True value | Estimate | 95% interval |
+|---|---|---|---|
+| Healthy to disabled | 0.10 | 0.1001 | 0.0977 to 0.1024 |
+| Death while healthy | 0.05 | 0.0512 | 0.0495 to 0.0528 |
+| Death while disabled | 0.20 | 0.2010 | 0.1937 to 0.2084 |
+
+### Excel cross-check
+
+`excel/disability_death_crosscheck.xlsx` rebuilds the calculations independently, using spreadsheet formulas only:
+
+- an **Euler sheet** that solves the forward equations step by step and evaluates the annuity and insurance integrals
+- a **closed-form sheet** with the exact formulas for constant intensities
+- an **experience sheet** that re-estimates the intensities from the SQL query results, giving the same estimates as R
+
+At the default assumptions, R and Excel agree to the cent, and both are within 0.03% of the exact closed-form premium (the gap is the Euler discretisation error):
+
+| | R calculator | Excel (Euler) | Exact closed form |
+|---|---|---|---|
+| Annual premium | $2,433.23 | $2,433.23 | $2,432.57 |
+| EPV of disability benefit | $15,960.66 | $15,960.66 | $15,955.76 |
+| EPV of death benefit | $8,313.12 | $8,313.12 | $8,312.26 |
 
 ### Calculator v1: Disability & Death
 
@@ -165,7 +187,7 @@ The two SQL queries in `sql/` produce exactly the inputs to this formula: `trans
 
 ### A closed-form check
 
-For constant intensities in the three-state permanent disability model, the probabilities have exact solutions, which is what the tests compare the numerical solver against:
+For constant intensities in the three-state permanent disability model, the probabilities have exact solutions, which the tests and the Excel workbook compare the numerical solver against:
 
 $$
 {}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})\,t}
@@ -191,11 +213,15 @@ $$
 
 ## How correctness is checked
 
-Every function has automated tests (`tests/`). Expected values are worked out by hand before the code is written, or derived as closed-form formulas, and the numerical results must match. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, annuities over all states required to add up to a certain annuity, premiums checked against closed-form values, the SQL queries checked on a small hand-built database, and simulated data required to recover the true intensities.
+Three independent layers:
+
+1. **Automated tests** (`tests/`): expected values are worked out by hand before the code is written, or derived as closed-form formulas. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, annuities over all states required to add up to a certain annuity, premiums checked against closed-form values, the SQL queries checked on a small hand-built database, and simulated data required to recover the true intensities.
+2. **Excel rebuild** (`excel/`): the same calculations implemented separately in spreadsheet formulas, which match R to the cent for the premium and exactly for the intensity estimates.
+3. **Closed-form comparison**: both numerical results are compared with the exact answer, so the size of the numerical error is known.
 
 ## Important note on assumptions
 
-The intensities used in the examples, tests and calculator are illustrative numbers chosen so results can be checked, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
+The intensities used in the examples, tests, workbook and calculator are illustrative numbers chosen so results can be checked, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
 
 ## Getting started
 
@@ -225,9 +251,9 @@ shiny::runApp("app")
 |---|---|---|
 | 1 | Multiple state models, annuities, insurances, premiums | Done |
 | Data layer | SQL experience data and intensity estimation | Done |
+| Excel | Independent cross-check workbook | Done |
 | Calculator | Disability & Death tab | v1 done |
-| Excel | Assumptions workbook and independent cross-check | Next |
-| 2 | Multiple decrement models (death, lapse, cause-specific benefits) | Planned |
+| 2 | Multiple decrement models (death, lapse, cause-specific benefits) | Next |
 | 3 | Multiple life models (joint life, last survivor, contingent) | Planned |
 | 4 | Profit testing and analysis of surplus by source | Planned |
 | 5 | Pension mathematics | Planned |
@@ -239,6 +265,7 @@ shiny::runApp("app")
 ```
 r/          model functions and experience-data functions
 sql/        database schema and SQL queries
+excel/      independent cross-check workbook
 tests/      automated tests with hand-checked expected values
 app/        Shiny calculator
 docs/       images and write-ups
