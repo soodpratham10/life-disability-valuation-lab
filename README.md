@@ -1,52 +1,116 @@
-# Actuarial Models Lab (R)
+# The Odds of a Lifetime
 
-An R toolkit that implements life contingencies models from first principles, verifies every function against hand-derived answers, estimates its assumptions from experience data stored in SQL, cross-checks its results in Excel, and puts an interactive calculator on top.
+*One policy, every way a life can unfold.*
 
-![Disability & Death Policy Calculator](docs/calculator.png)
+![The Odds of a Lifetime calculator](docs/calculator.png)
 
-## What this project is about
+## Prologue
 
-> Once a policy is sold, how much money must the insurer hold to keep its promise, and how do we explain the gap between what we expected and what actually happened?
+Someone signs an insurance policy today. In return for a premium, an insurer makes a promise that may not be tested for decades.
 
-Most insurance models start from "alive or dead." Real products, such as disability income, depend on a person moving between several states over time. This project builds that machinery step by step, then connects it to premiums, reserves, profit and surplus analysis.
+Then life happens. They might fall ill and recover, or not. They might stop paying and walk away. They might share the promise with a partner, retire on it, or count on a guarantee buried in the fine print. Every one of those paths has odds, and every path costs something.
 
-## The plan
+This project prices those odds. Each chapter takes one way a life can unfold, builds the actuarial model for it from first principles, checks it against hand-derived answers, and turns it into an interactive calculator. Together they answer one question:
 
-The project follows one story from start to finish:
+> Once a promise is sold, how much must the insurer hold to keep it, and why did the result differ from what was expected?
 
-1. **How do people move?** Multiple state, multiple decrement and multiple life models describe what can happen to a policyholder and with what probability.
-2. **What does it cost?** Premiums and pension contributions are set so that the expected value of what comes in balances what goes out.
-3. **What actually happened?** Profit testing and analysis of surplus show whether a product made money and which assumption (interest, mortality, expenses, lapses) drove the result.
-4. **Modern products.** Universal life and embedded options show how flexible accounts and guarantees change the risk.
+## The chapters
 
-## Tools
+| Chapter | Title | The story | Actuarial model | Status |
+|---|---|---|---|---|
+| 1 | **Detours** | Life doesn't go in a straight line | Multiple state models (healthy, disabled, dead) | Done |
+| 2 | **Exits** | Everyone leaves eventually, but how? | Multiple decrement models (death, lapse) | Done |
+| 3 | **Two Lives** | A promise made to a couple | Multiple life models (joint life, last survivor) | Next |
+| 4 | **The Long Wait** | Decades of saving for the years after work | Pension mathematics | Planned |
+| 5 | **The Reckoning** | Did the promise pay off for the insurer? | Profit testing and analysis of surplus | Planned |
+| 6 | **Room to Move** | A promise that bends | Universal life | Planned |
+| 7 | **The Fine Print** | Guarantees that cost more than they look | Embedded options | Planned |
 
-| Tool | Role | Status |
-|---|---|---|
-| R | Model engine and automated tests | In use |
-| SQL (SQLite) | Experience data: time spent in each state and transitions between states, aggregated with SQL queries | In use |
-| Excel | Assumptions and an independent rebuild of the calculations in spreadsheet formulas, to cross-check the R results | In use |
-| Shiny | Interactive calculator, one tab per module | v1 |
+Each chapter adds a tab to the calculator, built on the same tested engine.
 
-The pipeline: simulated experience data is stored in SQLite, SQL queries aggregate it, R estimates the transition intensities and runs the models, Excel independently reproduces the results, and the calculator shows them.
+## The toolkit
 
-## What works today
+| Tool | Role |
+|---|---|
+| R | The engine: every model, built from first principles, with automated tests |
+| SQL (SQLite) | Where the odds come from: experience data on time spent in each state and transitions between states |
+| Excel | A second opinion: an independent rebuild of the calculations in spreadsheet formulas |
+| Shiny | The calculator: one tab per chapter |
 
-### Module 1: multiple state models
+---
 
-- **Transition probabilities for discrete-time chains**: k-step probabilities for homogeneous and non-homogeneous Markov chains, with input validation
-- **Kolmogorov forward equations**: a general Euler solver that takes any set of transition intensities (constant or varying with time) and returns the probability of being in each state at any time
-- **State-dependent annuities and insurances**: expected present values of payments made while in a state, or on entry into a state
-- **Equivalence-principle premiums**: the level premium that balances the EPV of benefits against the EPV of premiums
+## Chapter 1: Detours
 
-### Data layer: estimating intensities from experience
+*A healthy person may become disabled, and a disabled person may die. The policy pays an income while they are disabled and a lump sum on death, and premiums stop while they are not healthy.*
 
-- **Simulation**: synthetic policyholders move between healthy, disabled and dead according to known "true" intensities, observed for a fixed period
-- **SQLite database**: one row per spell (a stretch of time a person spent in one state), with the state moved to, or empty if still there when observation ended
-- **SQL queries** (`sql/`): total exposure in each state and the number of each type of transition
-- **Estimation**: occurrence-exposure estimates of each intensity with standard errors and 95% intervals
+### What the engine does
 
-With 20,000 simulated lives observed for 5 years, the estimates land close to the truth, and every true value falls inside its 95% interval:
+- **Transition probabilities** for discrete-time Markov chains, homogeneous or not, with input validation
+- **Kolmogorov's forward equations**, solved by Euler's method for any set of intensities, constant or varying with time
+- **Annuities and insurances by state**: payments while in a state, or on entry into a state
+- **Premiums** by the equivalence principle
+
+### The mathematics
+
+Notation follows Dickson, Hardy and Waters, *Actuarial Mathematics for Life Contingent Risks*.
+
+The probability of being in state $j$ at age $x+t$, given state $i$ at age $x$, and the transition intensity from $i$ to $j$:
+
+$$
+{}_tp_x^{ij} = \Pr\big[\text{in state } j \text{ at age } x+t \mid \text{in state } i \text{ at age } x\big],
+\qquad
+\mu_x^{ij} = \lim_{h \to 0^+} \frac{{}_hp_x^{ij}}{h}
+$$
+
+Kolmogorov's forward equations: the probability of being in state $j$ grows with flow in and shrinks with flow out.
+
+$$
+\frac{d}{dt}\,{}_tp_x^{ij} = \sum_{k \neq j} \Big( {}_tp_x^{ik}\,\mu_{x+t}^{kj} - {}_tp_x^{ij}\,\mu_{x+t}^{jk} \Big)
+$$
+
+These are solved with Euler's method, using the generator matrix $\mathbf{Q}$ (intensities off the diagonal, minus the row sums on it):
+
+$$
+\mathbf{P}(t+h) \approx \mathbf{P}(t) + h\,\mathbf{P}(t)\,\mathbf{Q}(t)
+$$
+
+Annuity while in state $j$, and insurance on entry into state $j$, over $n$ years at force of interest $\delta$:
+
+$$
+\bar{a}_{x:\overline{n}|}^{\,ij} = \int_0^n e^{-\delta t}\; {}_tp_x^{ij}\; dt
+$$
+
+$$
+\bar{A}_{x:\overline{n}|}^{\,ij} = \int_0^n e^{-\delta t} \sum_{k \neq j} {}_tp_x^{ik}\,\mu_{x+t}^{kj}\; dt
+$$
+
+Premium paid while healthy, for $D$ per year while disabled and $B$ on death:
+
+$$
+P = \frac{D\,\bar{a}_{x:\overline{n}|}^{\,01} + B\,\bar{A}_{x:\overline{n}|}^{\,02}}{\bar{a}_{x:\overline{n}|}^{\,00}}
+$$
+
+For constant intensities there are exact answers, which the tests and the Excel workbook compare against:
+
+$$
+{}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})\,t},
+\qquad
+{}_tp_x^{01} = \frac{\mu^{01}}{\mu^{12}-\mu^{01}-\mu^{02}}\Big(e^{-(\mu^{01}+\mu^{02})\,t} - e^{-\mu^{12}\,t}\Big)
+$$
+
+### Where the odds come from
+
+The intensities don't have to be typed in. They can be estimated from experience.
+
+Synthetic policyholders are simulated moving between states, stored in SQLite as one row per spell (a stretch of time in one state), and summarised with SQL. With $D^{ij}$ transitions from $i$ to $j$ and $T^{i}$ total years spent in state $i$:
+
+$$
+\hat{\mu}^{ij} = \frac{D^{ij}}{T^{i}},
+\qquad
+\text{Var}\big(\hat{\mu}^{ij}\big) \approx \frac{D^{ij}}{\big(T^{i}\big)^2}
+$$
+
+`sql/transitions.sql` counts the transitions and `sql/exposure.sql` sums the exposure. With 20,000 simulated lives observed for 5 years, every true value falls inside its 95% interval:
 
 | Transition | True value | Estimate | 95% interval |
 |---|---|---|---|
@@ -54,174 +118,88 @@ With 20,000 simulated lives observed for 5 years, the estimates land close to th
 | Death while healthy | 0.05 | 0.0512 | 0.0495 to 0.0528 |
 | Death while disabled | 0.20 | 0.2010 | 0.1937 to 0.2084 |
 
-### Excel cross-check
+The calculator can load these estimates with one click.
 
-`excel/disability_death_crosscheck.xlsx` rebuilds the calculations independently, using spreadsheet formulas only:
+### A second opinion
 
-- an **Euler sheet** that solves the forward equations step by step and evaluates the annuity and insurance integrals
-- a **closed-form sheet** with the exact formulas for constant intensities
-- an **experience sheet** that re-estimates the intensities from the SQL query results, giving the same estimates as R
+`excel/disability_death_crosscheck.xlsx` rebuilds Chapter 1 in spreadsheet formulas only: an Euler sheet, a closed-form sheet, and an experience sheet that re-estimates the intensities from the SQL results. R and Excel agree to the cent, and both are within 0.03% of the exact answer (the gap is the Euler step error):
 
-At the default assumptions, R and Excel agree to the cent, and both are within 0.03% of the exact closed-form premium (the gap is the Euler discretisation error):
-
-| | R calculator | Excel (Euler) | Exact closed form |
+| | R | Excel (Euler) | Exact |
 |---|---|---|---|
 | Annual premium | $2,433.23 | $2,433.23 | $2,432.57 |
 | EPV of disability benefit | $15,960.66 | $15,960.66 | $15,955.76 |
 | EPV of death benefit | $8,313.12 | $8,313.12 | $8,312.26 |
 
-### Calculator v1: Disability & Death
+---
 
-A Shiny app (`app/`) that wraps the engine. You set the transition intensities, interest rate, policy term and benefits, and it shows the annual premium, the expected present value of each benefit, and how the probability of being healthy, disabled or dead changes over time. One button loads the intensities estimated from the SQL experience data into the model.
+## Chapter 2: Exits
 
-### Example
+*A term policy ends in one of three ways: the policyholder dies, walks away (lapses), or reaches the end of the term. How many leave each way, and when, changes the price.*
 
-```r
-source("r/multistate.R")
+### What the engine does
 
-# States: 1 = healthy, 2 = disabled, 3 = dead (illustrative intensities)
-mu <- matrix(c(0, 0.10, 0.05,
-               0, 0,    0.20,
-               0, 0,    0), nrow = 3, byrow = TRUE)
+- **Multiple decrement tables**: lives in force and exits by cause, year by year
+- **Associated single decrement rates**: converting between independent and dependent rates under either uniform distribution assumption, for any number of decrements
+- **Constant forces of decrement**
+- **Benefits that depend on the cause of exit**, annuities and premiums
 
-# Annual premium, paid while healthy, for 1 per year while disabled (20 years)
-benefit <- epv_annuity(mu, i = 1, j = 2, n = 20, delta = 0.06)
-equivalence_premium(benefit, mu, start = 1, premium_states = 1,
-                    n = 20, delta = 0.06)
-# about 0.369 per year
-```
+### The mathematics
 
-## The mathematics
-
-Notation follows Dickson, Hardy and Waters, *Actuarial Mathematics for Life Contingent Risks*.
-
-### States and transition probabilities
-
-A policyholder moves between a finite set of states (for example healthy, disabled, dead). The probability of being in state $j$ at age $x+t$, given state $i$ at age $x$, is
+Total exit probability, and the probability of staying in force for $k$ years:
 
 $$
-{}_tp_x^{ij} = \Pr\big[\text{in state } j \text{ at age } x+t \mid \text{in state } i \text{ at age } x\big]
+q^{(\tau)}_{x} = \sum_j q^{(j)}_{x},
+\qquad
+{}_kp^{(\tau)}_x = \prod_{r=0}^{k-1}\big(1 - q^{(\tau)}_{x+r}\big)
 $$
 
-The process is Markov: the future depends only on the current state. The transition intensity from $i$ to $j$ is
+If each decrement is uniformly distributed over the year in its own single decrement table, the dependent rates follow from the independent ones:
 
 $$
-\mu_x^{ij} = \lim_{h \to 0^+} \frac{{}_hp_x^{ij}}{h}, \qquad i \neq j
+q^{(j)}_x = q^{\prime(j)}_x \int_0^1 \prod_{k \neq j} \big(1 - t\,q^{\prime(k)}_x\big)\, dt
 $$
 
-### Kolmogorov's forward equations
+which for two decrements is $q^{(1)} = q^{\prime(1)}\big(1 - \tfrac{1}{2}q^{\prime(2)}\big)$. If instead decrements are uniform in the multiple decrement table:
 
 $$
-\frac{d}{dt}\,{}_tp_x^{ij} = \sum_{k \neq j} \Big( {}_tp_x^{ik}\,\mu_{x+t}^{kj} - {}_tp_x^{ij}\,\mu_{x+t}^{jk} \Big)
+p^{\prime(j)}_x = \big(p^{(\tau)}_x\big)^{q^{(j)}_x / q^{(\tau)}_x}
 $$
 
-with starting values
+Benefits $b^{(j)}$ paid at the end of the year of exit, and premiums paid at the start of each year while in force:
 
 $$
-{}_0p_x^{ii} = 1, \qquad {}_0p_x^{ij} = 0 \quad (j \neq i)
+\text{EPV} = \sum_{k=0}^{n-1} v^{k+1}\, {}_kp^{(\tau)}_x \sum_j b^{(j)}\, q^{(j)}_{x+k},
+\qquad
+\ddot{a} = \sum_{k=0}^{n-1} v^{k}\, {}_kp^{(\tau)}_x
 $$
 
-In words: the probability of being in state $j$ grows with flow in from other states and shrinks with flow out of $j$. These equations have no closed form for general intensities, so they are solved numerically with Euler's method. In matrix form, with step size $h$,
+### What the calculator shows
 
-$$
-\mathbf{P}(t+h) \approx \mathbf{P}(t) + h\,\mathbf{P}(t)\,\mathbf{Q}(t)
-$$
+A 20-year term policy with a $250,000 death benefit, mortality starting at 0.002 and rising 8% a year, lapses of 10% in year one and 5% after, and 5% interest:
 
-where the generator matrix has off-diagonal entries equal to the intensities and diagonal entries equal to minus the row sums:
-
-$$
-Q_{ij} = \mu_{x+t}^{ij} \;\; (i \neq j), \qquad Q_{ii} = -\sum_{j \neq i} \mu_{x+t}^{ij}
-$$
-
-### Annuities and insurances by state
-
-The expected present value of 1 per year paid continuously while in state $j$, for a life now in state $i$, over $n$ years at force of interest $\delta$:
-
-$$
-\bar{a}_{x:\overline{n}|}^{\,ij} = \int_0^n e^{-\delta t}\; {}_tp_x^{ij}\; dt
-$$
-
-The expected present value of 1 paid immediately on every transition into state $j$:
-
-$$
-\bar{A}_{x:\overline{n}|}^{\,ij} = \int_0^n e^{-\delta t} \sum_{k \neq j} {}_tp_x^{ik}\,\mu_{x+t}^{kj}\; dt
-$$
-
-Both integrals are evaluated with the trapezoid rule on the Euler solution.
-
-### Premiums
-
-Under the equivalence principle, the level premium rate $P$ paid while healthy satisfies
-
-$$
-P \cdot \bar{a}_{x:\overline{n}|}^{\,00} = \text{EPV of benefits}
-$$
-
-so that
-
-$$
-P = \frac{\text{EPV of benefits}}{\bar{a}_{x:\overline{n}|}^{\,00}}
-$$
-
-For a policy paying $D$ per year while disabled and $B$ on death, the EPV of benefits is
-
-$$
-D\,\bar{a}_{x:\overline{n}|}^{\,01} + B\,\bar{A}_{x:\overline{n}|}^{\,02}
-$$
-
-### Estimating intensities from experience
-
-If $D^{ij}$ is the number of observed transitions from state $i$ to state $j$, and $T^{i}$ is the total time all lives spent in state $i$, the maximum likelihood estimate of a constant intensity is
-
-$$
-\hat{\mu}^{ij} = \frac{D^{ij}}{T^{i}}
-$$
-
-with approximate variance
-
-$$
-\text{Var}\big(\hat{\mu}^{ij}\big) \approx \frac{D^{ij}}{\big(T^{i}\big)^2}
-$$
-
-The two SQL queries in `sql/` produce exactly the inputs to this formula: `transitions.sql` counts each type of transition, and `exposure.sql` sums the time spent in each state.
-
-### A closed-form check
-
-For constant intensities in the three-state permanent disability model, the probabilities have exact solutions, which the tests and the Excel workbook compare the numerical solver against:
-
-$$
-{}_tp_x^{00} = e^{-(\mu^{01}+\mu^{02})\,t}
-$$
-
-$$
-{}_tp_x^{01} = \frac{\mu^{01}}{\mu^{12}-\mu^{01}-\mu^{02}}\Big(e^{-(\mu^{01}+\mu^{02})\,t} - e^{-\mu^{12}\,t}\Big)
-$$
-
-### How the formulas map to code
-
-| Formula | Function |
+| | Premium |
 |---|---|
-| k-step transition probabilities | `kstep_probs()` |
-| Generator matrix | `make_generator()` |
-| Forward equations by Euler's method | `kolmogorov_path()`, `euler_kolmogorov()` |
-| Annuity by state | `epv_annuity()` |
-| Insurance on entry to a state | `epv_insurance()` |
-| Equivalence-principle premium | `equivalence_premium()` |
-| Simulated experience | `simulate_experience()` |
-| Database and SQL queries | `write_experience_db()`, `query_experience()` |
-| Occurrence-exposure estimates | `estimate_intensities()` |
+| Allowing for lapses | $816.86 |
+| If nobody lapses | $953.62 |
+| Effect of lapses | −14.3% |
+
+Lapses remove people before they reach the expensive later years, so the expected lapses lower the premium. This is **lapse-supported pricing**, and it is a real risk: if fewer people lapse than assumed, the insurer has undercharged.
+
+### The two chapters are one model
+
+A multiple decrement model is a multiple state model with one starting state. A test checks this directly: the Chapter 1 Kolmogorov solver, applied to a model with states *in force*, *dead* and *lapsed*, reproduces the Chapter 2 decrement probabilities.
+
+---
 
 ## How correctness is checked
 
-Three independent layers:
+1. **Automated tests** (`tests/`, 55 checks): expected values worked out by hand or derived as closed-form formulas before the code is written
+2. **Excel rebuild** (`excel/`): the same calculations in spreadsheet formulas, matching R to the cent
+3. **Exact answers**: numerical results compared with closed forms, so the size of the numerical error is known
 
-1. **Automated tests** (`tests/`): expected values are worked out by hand before the code is written, or derived as closed-form formulas. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, annuities over all states required to add up to a certain annuity, premiums checked against closed-form values, the SQL queries checked on a small hand-built database, and simulated data required to recover the true intensities.
-2. **Excel rebuild** (`excel/`): the same calculations implemented separately in spreadsheet formulas, which match R to the cent for the premium and exactly for the intensity estimates.
-3. **Closed-form comparison**: both numerical results are compared with the exact answer, so the size of the numerical error is known.
+## A note on assumptions
 
-## Important note on assumptions
-
-The intensities used in the examples, tests, workbook and calculator are illustrative numbers chosen so results can be checked, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
+The rates in the examples, tests, workbook and calculator are illustrative, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
 
 ## Getting started
 
@@ -231,6 +209,7 @@ install.packages(c("testthat", "DBI", "RSQLite", "shiny"))
 # Run the tests
 testthat::test_file("tests/test_multistate.R")
 testthat::test_file("tests/test_experience.R")
+testthat::test_file("tests/test_decrement.R")
 
 # Build the experience database (the file is not stored in the repository)
 source("r/multistate.R"); source("r/experience.R")
@@ -241,33 +220,26 @@ spells <- simulate_experience(mu_true, n = 20000, obs_years = 5, seed = 2026)
 con <- write_experience_db(spells, "sql/experience.sqlite")
 DBI::dbDisconnect(con)
 
-# Launch the calculator
+# Open the calculator
 shiny::runApp("app")
 ```
 
-## Roadmap
+## How the pieces map to code
 
-| Module | Topic | Status |
+| Chapter | File | Key functions |
 |---|---|---|
-| 1 | Multiple state models, annuities, insurances, premiums | Done |
-| Data layer | SQL experience data and intensity estimation | Done |
-| Excel | Independent cross-check workbook | Done |
-| Calculator | Disability & Death tab | v1 done |
-| 2 | Multiple decrement models (death, lapse, cause-specific benefits) | Next |
-| 3 | Multiple life models (joint life, last survivor, contingent) | Planned |
-| 4 | Profit testing and analysis of surplus by source | Planned |
-| 5 | Pension mathematics | Planned |
-| 6 | Universal life | Planned |
-| 7 | Embedded options in life insurance and annuities | Planned |
+| 1. Detours | `r/multistate.R` | `kstep_probs()`, `kolmogorov_path()`, `euler_kolmogorov()`, `epv_annuity()`, `epv_insurance()`, `equivalence_premium()` |
+| 1. Where the odds come from | `r/experience.R`, `sql/` | `simulate_experience()`, `write_experience_db()`, `query_experience()`, `estimate_intensities()` |
+| 2. Exits | `r/decrement.R` | `decrement_table()`, `udd_single_to_multiple()`, `udd_multiple_to_single()`, `md_epv_benefits()`, `md_premium()` |
 
 ## Repository layout
 
 ```
-r/          model functions and experience-data functions
+r/          the engine, one file per chapter
 sql/        database schema and SQL queries
 excel/      independent cross-check workbook
 tests/      automated tests with hand-checked expected values
-app/        Shiny calculator
+app/        the calculator
 docs/       images and write-ups
 ```
 

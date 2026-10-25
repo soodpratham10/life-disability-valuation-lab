@@ -21,8 +21,8 @@ if (!is.na(db_path)) {
 money <- function(x) paste0("$", formatC(x, format = "f", big.mark = ",", digits = 2))
 note <- p(em("Illustrative assumptions only. Not calibrated to real data and not a pricing basis."))
 
-# ---------- Tab 1: Disability & Death (multiple state model) ----------
-tab_disability <- tabPanel("Disability & Death",
+# ---------- Chapter 1: Detours (multiple state model) ----------
+tab_disability <- tabPanel("Chapter 1: Detours",
                            sidebarLayout(
                              sidebarPanel(
                                h4("Transition intensities (per year)"),
@@ -46,6 +46,8 @@ tab_disability <- tabPanel("Disability & Death",
                                             value = 50000, min = 0, step = 5000)
                              ),
                              mainPanel(
+                               p(em("A healthy person may become disabled, and a disabled person may die.
+            The policy pays an income while disabled and a lump sum on death.")),
                                h3("Results"),
                                tableOutput("results"),
                                h3("Where a healthy policyholder is over time"),
@@ -60,8 +62,8 @@ tab_disability <- tabPanel("Disability & Death",
                            )
 )
 
-# ---------- Tab 2: Death & Lapse (multiple decrement model) ----------
-tab_lapse <- tabPanel("Death & Lapse",
+# ---------- Chapter 2: Exits (multiple decrement model) ----------
+tab_lapse <- tabPanel("Chapter 2: Exits",
                       sidebarLayout(
                         sidebarPanel(
                           h4("Term insurance"),
@@ -82,6 +84,8 @@ tab_lapse <- tabPanel("Death & Lapse",
                                       value = 0.05, step = 0.005)
                         ),
                         mainPanel(
+                          p(em("A term policy ends in one of three ways: the policyholder dies, walks away,
+            or reaches the end of the term. How many leave each way changes the price.")),
                           h3("Results"),
                           tableOutput("dl_results"),
                           h3("What happens to 1,000 policies"),
@@ -96,13 +100,14 @@ tab_lapse <- tabPanel("Death & Lapse",
 )
 
 ui <- fluidPage(
-  titlePanel("Actuarial Models Lab: Policy Calculator"),
+  titlePanel("The Odds of a Lifetime", windowTitle = "The Odds of a Lifetime"),
+  p(em("One policy, every way a life can unfold.")),
   tabsetPanel(tab_disability, tab_lapse)
 )
 
 server <- function(input, output, session) {
   
-  # ----- Tab 1 -----
+  # ----- Chapter 1 -----
   calc <- reactive({
     mu <- matrix(c(0, input$mu01, input$mu02,
                    0, 0,          input$mu12,
@@ -160,7 +165,7 @@ server <- function(input, output, session) {
     })
   }
   
-  # ----- Tab 2 -----
+  # ----- Chapter 2 -----
   dl <- reactive({
     n <- input$dl_n
     k <- 0:(n - 1)
