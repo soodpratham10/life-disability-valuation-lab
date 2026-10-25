@@ -76,3 +76,10 @@ epv_insurance <- function(mu, i, j, n, delta, h = 0.01) {
   })
   h * sum((f[-1] + f[-length(f)]) / 2)
 }
+
+equivalence_premium <- function(epv_benefits, mu, start, premium_states,
+                                n, delta, h = 0.01) {
+  a_prem <- sum(sapply(premium_states, function(j)
+    epv_annuity(mu, start, j, n, delta, h)))
+  epv_benefits / a_prem
+}

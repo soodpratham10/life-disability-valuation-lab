@@ -81,3 +81,36 @@ test_that("insurance on entry to the dead state matches the closed form", {
   expect_equal(epv_insurance(mu, 1, 3, n = 20, delta),
                0.05 * a00 + 0.20 * a01, tolerance = 2e-3)
 })
+
+exact_a00 <- (1 - exp(-0.21 * 20)) / 0.21
+exact_a01 <- 2 * ((1 - exp(-0.21 * 20)) / 0.21 - (1 - exp(-0.26 * 20)) / 0.26)
+exact_A02 <- 0.05 * exact_a00 + 0.20 * exact_a01
+
+test_that("disability income premium matches the closed form", {
+  benefit <- epv_annuity(mu, 1, 2, n = 20, delta)
+  P <- equivalence_premium(benefit, mu, start = 1, premium_states = 1,
+                           n = 20, delta = delta)
+  expect_equal(P, exact_a01 / exact_a00, tolerance = 5e-3)
+})
+
+test_that("death benefit premium matches the closed form", {
+  benefit <- 100 * epv_insurance(mu, 1, 3, n = 20, delta)
+  P <- equivalence_premium(benefit, mu, start = 1, premium_states = 1,
+                           n = 20, delta = delta)
+  expect_equal(P, 100 * exact_A02 / exact_a00, tolerance = 5e-3)
+})
+
+test_that("combined benefits give the combined premium", {
+  benefit <- epv_annuity(mu, 1, 2, n = 20, delta) +
+    10 * epv_insurance(mu, 1, 3, n = 20, delta)
+  P <- equivalence_premium(benefit, mu, start = 1, premium_states = 1,
+                           n = 20, delta = delta)
+  expect_equal(P, (exact_a01 + 10 * exact_A02) / exact_a00, tolerance = 5e-3)
+})
+
+test_that("premiums and benefits have equal EPV at issue", {
+  benefit <- 100 * epv_insurance(mu, 1, 3, n = 20, delta)
+  P <- equivalence_premium(benefit, mu, start = 1, premium_states = 1,
+                           n = 20, delta = delta)
+  expect_equal(P * epv_annuity(mu, 1, 1, n = 20, delta), benefit)
+})
