@@ -1,6 +1,8 @@
 # Actuarial Models Lab (R)
 
-An R toolkit that implements life contingencies models from first principles and verifies every function against hand-derived answers. SQL, Excel and an interactive calculator are planned on top of the same engine.
+An R toolkit that implements life contingencies models from first principles, verifies every function against hand-derived answers, estimates its assumptions from experience data stored in SQL, and puts an interactive calculator on top.
+
+![Disability & Death Policy Calculator](docs/calculator.png)
 
 ## What this project is about
 
@@ -22,18 +24,33 @@ The project follows one story from start to finish:
 | Tool | Role | Status |
 |---|---|---|
 | R | Model engine and automated tests | In use |
-| SQL (SQLite) | Synthetic experience data: policyholders, time spent in each state, transitions between states | Planned |
+| SQL (SQLite) | Experience data: time spent in each state and transitions between states, aggregated with SQL queries | In use |
+| Shiny | Interactive calculator, one tab per module | v1 |
 | Excel | Assumptions workbook, plus an independent spreadsheet rebuild of key calculations to cross-check the R results | Planned |
-| Shiny | Interactive calculator, one tab per module | Next |
 
-The planned pipeline is: experience data in SQL, intensities estimated and models run in R, assumptions and cross-checks in Excel, results explored in the calculator.
+The pipeline: simulated experience data is stored in SQLite, SQL queries aggregate it, R estimates the transition intensities and runs the models, and the calculator shows the results.
 
-## What works today (Module 1: multiple state models)
+## What works today
+
+### Module 1: multiple state models
 
 - **Transition probabilities for discrete-time chains**: k-step probabilities for homogeneous and non-homogeneous Markov chains, with input validation
 - **Kolmogorov forward equations**: a general Euler solver that takes any set of transition intensities (constant or varying with time) and returns the probability of being in each state at any time
 - **State-dependent annuities and insurances**: expected present values of payments made while in a state, or on entry into a state
 - **Equivalence-principle premiums**: the level premium that balances the EPV of benefits against the EPV of premiums
+
+### Data layer: estimating intensities from experience
+
+- **Simulation**: synthetic policyholders move between healthy, disabled and dead according to known "true" intensities, observed for a fixed period
+- **SQLite database**: one row per spell (a stretch of time a person spent in one state), with the state moved to, or empty if still there when observation ended
+- **SQL queries** (`sql/`): total exposure in each state and the number of each type of transition
+- **Estimation**: occurrence-exposure estimates of each intensity with standard errors and 95% intervals
+
+With 20,000 simulated lives observed for 5 years, the estimates land close to the truth, for example 0.1001 against a true 0.10 for healthy to disabled, and 0.0512 against 0.05 for death while healthy, with the true values inside the 95% intervals.
+
+### Calculator v1: Disability & Death
+
+A Shiny app (`app/`) that wraps the engine. You set the transition intensities, interest rate, policy term and benefits, and it shows the annual premium, the expected present value of each benefit, and how the probability of being healthy, disabled or dead changes over time. One button loads the intensities estimated from the SQL experience data into the model.
 
 ### Example
 
@@ -130,6 +147,22 @@ $$
 D\,\bar{a}_{x:\overline{n}|}^{\,01} + B\,\bar{A}_{x:\overline{n}|}^{\,02}
 $$
 
+### Estimating intensities from experience
+
+If $D^{ij}$ is the number of observed transitions from state $i$ to state $j$, and $T^{i}$ is the total time all lives spent in state $i$, the maximum likelihood estimate of a constant intensity is
+
+$$
+\hat{\mu}^{ij} = \frac{D^{ij}}{T^{i}}
+$$
+
+with approximate variance
+
+$$
+\operatorname{Var}\big(\hat{\mu}^{ij}\big) \approx \frac{D^{ij}}{\big(T^{i}\big)^2}
+$$
+
+The two SQL queries in `sql/` produce exactly the inputs to this formula: `transitions.sql` counts each type of transition, and `exposure.sql` sums the time spent in each state.
+
 ### A closed-form check
 
 For constant intensities in the three-state permanent disability model, the probabilities have exact solutions, which is what the tests compare the numerical solver against:
@@ -152,22 +185,48 @@ $$
 | Annuity by state | `epv_annuity()` |
 | Insurance on entry to a state | `epv_insurance()` |
 | Equivalence-principle premium | `equivalence_premium()` |
+| Simulated experience | `simulate_experience()` |
+| Database and SQL queries | `write_experience_db()`, `query_experience()` |
+| Occurrence-exposure estimates | `estimate_intensities()` |
 
 ## How correctness is checked
 
-Every function has automated tests (`tests/`). Expected values are worked out by hand before the code is written, or derived as closed-form formulas, and the numerical results must match. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, annuities over all states required to add up to a certain annuity, and premiums checked against closed-form values.
+Every function has automated tests (`tests/`). Expected values are worked out by hand before the code is written, or derived as closed-form formulas, and the numerical results must match. Examples: one- and two-step Euler results checked by hand, the solver compared to exact exponential formulas, annuities over all states required to add up to a certain annuity, premiums checked against closed-form values, the SQL queries checked on a small hand-built database, and simulated data required to recover the true intensities.
 
 ## Important note on assumptions
 
-The transition intensities used in the examples and tests are illustrative numbers chosen so results can be checked. They are **not calibrated to real data** and are not a pricing basis.
+The intensities used in the examples, tests and calculator are illustrative numbers chosen so results can be checked, and the experience data is simulated. They are **not calibrated to real data** and are not a pricing basis.
+
+## Getting started
+
+```r
+install.packages(c("testthat", "DBI", "RSQLite", "shiny"))
+
+# Run the tests
+testthat::test_file("tests/test_multistate.R")
+testthat::test_file("tests/test_experience.R")
+
+# Build the experience database (the file is not stored in the repository)
+source("r/multistate.R"); source("r/experience.R")
+mu_true <- matrix(c(0, 0.10, 0.05,
+                    0, 0,    0.20,
+                    0, 0,    0), nrow = 3, byrow = TRUE)
+spells <- simulate_experience(mu_true, n = 20000, obs_years = 5, seed = 2026)
+con <- write_experience_db(spells, "sql/experience.sqlite")
+DBI::dbDisconnect(con)
+
+# Launch the calculator
+shiny::runApp("app")
+```
 
 ## Roadmap
 
 | Module | Topic | Status |
 |---|---|---|
 | 1 | Multiple state models, annuities, insurances, premiums | Done |
-| Calculator | Shiny app, Disability & Death tab | Next |
-| Data layer | SQL experience data, estimating transition intensities from it, Excel assumptions and cross-check workbook | Planned |
+| Data layer | SQL experience data and intensity estimation | Done |
+| Calculator | Disability & Death tab | v1 done |
+| Excel | Assumptions workbook and independent cross-check | Next |
 | 2 | Multiple decrement models (death, lapse, cause-specific benefits) | Planned |
 | 3 | Multiple life models (joint life, last survivor, contingent) | Planned |
 | 4 | Profit testing and analysis of surplus by source | Planned |
@@ -178,17 +237,11 @@ The transition intensities used in the examples and tests are illustrative numbe
 ## Repository layout
 
 ```
-r/          model functions (one file per module)
+r/          model functions and experience-data functions
+sql/        database schema and SQL queries
 tests/      automated tests with hand-checked expected values
-```
-
-Folders for the app, SQL, Excel and documentation will be added as those parts are built.
-
-## Running the tests
-
-```r
-install.packages("testthat")
-testthat::test_file("tests/test_multistate.R")
+app/        Shiny calculator
+docs/       images and write-ups
 ```
 
 ## About

@@ -40,18 +40,18 @@ vignettes/*.pdf
 .Renviron
 .env
 
-# pkgdown site
-docs/
-
 # translation temp files
 po/*~
 
 # RStudio Connect folder
 rsconnect/
 
+# Course material (kept private)
 reference/
 *.pdf
 
+# Generated database (rebuilt from the scripts)
 sql/*.sqlite
 
-sql/*.sqlite
+# macOS
+.DS_Store
