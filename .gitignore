@@ -51,3 +51,7 @@ rsconnect/
 
 reference/
 *.pdf
+
+sql/*.sqlite
+
+sql/*.sqlite
