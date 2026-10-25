@@ -1,10 +1,14 @@
+# ===================== Shared helper =====================
+
 # Find a SQL file whether we run from the project root or from tests/
 read_sql <- function(name) {
   for (p in c(file.path("sql", name), file.path("..", "sql", name))) {
     if (file.exists(p)) return(paste(readLines(p, warn = FALSE), collapse = "\n"))
-    }
+  }
   stop("Cannot find sql/", name)
 }
+
+# ===================== Chapter 1: Detours =====================
 
 # Simulate n people who all start in state 1 and are observed for obs_years.
 # mu: matrix of constant intensities (off-diagonal = mu^ij).
@@ -38,7 +42,7 @@ simulate_experience <- function(mu, n, obs_years, seed = NULL) {
   )
 }
 
-# Create the SQLite database and load the spells. Returns the connection.
+# Create the SQLite table of spells. Returns the connection.
 write_experience_db <- function(spells, path = ":memory:") {
   con <- DBI::dbConnect(RSQLite::SQLite(), path)
   DBI::dbExecute(con, "DROP TABLE IF EXISTS spell")
@@ -67,4 +71,68 @@ estimate_intensities <- function(experience, n_states) {
     se[i, j] <- sqrt(tr$n[r]) / time_in_i
   }
   list(mu = mu, se = se)
+}
+
+# ===================== Chapter 2: Exits =====================
+
+# Simulate n term policies, year by year, using dependent rates q
+# (one row per policy year; column 1 = death, column 2 = lapse).
+# Returns one row per policy: the year it ended and why (NA if it reached the end).
+simulate_policies <- function(q, n, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  q <- as.matrix(q)
+  term <- nrow(q)
+  exit_year <- rep(NA_integer_, n)
+  cause <- rep(NA_character_, n)
+  active <- rep(TRUE, n)
+  for (k in seq_len(term)) {
+    idx <- which(active)
+    u <- runif(length(idx))
+    dead <- u < q[k, 1]
+    lapsed <- !dead & u < q[k, 1] + q[k, 2]
+    exit_year[idx[dead | lapsed]] <- k
+    cause[idx[dead]] <- "death"
+    cause[idx[lapsed]] <- "lapse"
+    active[idx[dead | lapsed]] <- FALSE
+  }
+  data.frame(policy_id = seq_len(n), term = term,
+             exit_year = exit_year, cause = cause)
+}
+
+# Create the SQLite table of policies. Returns the connection.
+write_policy_db <- function(policies, path = ":memory:") {
+  con <- DBI::dbConnect(RSQLite::SQLite(), path)
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS policy")
+  DBI::dbExecute(con, read_sql("policy_schema.sql"))
+  DBI::dbWriteTable(con, "policy", policies, append = TRUE)
+  con
+}
+
+# Run the experience study query: in force, deaths and lapses by policy year
+query_exit_study <- function(con) {
+  DBI::dbGetQuery(con, read_sql("exit_study.sql"))
+}
+
+# Estimated dependent rates by policy year, with standard errors
+#   q_hat = exits / in force at the start of the year,  se = sqrt(q (1 - q) / in force)
+estimate_decrement_rates <- function(study) {
+  study$q_death  <- study$deaths / study$in_force
+  study$q_lapse  <- study$lapses / study$in_force
+  study$se_death <- sqrt(study$q_death * (1 - study$q_death) / study$in_force)
+  study$se_lapse <- sqrt(study$q_lapse * (1 - study$q_lapse) / study$in_force)
+  study
+}
+
+# Actual versus expected: compare the study with an assumed set of dependent rates q
+actual_vs_expected <- function(study, q) {
+  q <- as.matrix(q)
+  k <- study$policy_year
+  exp_deaths <- sum(study$in_force * q[k, 1])
+  exp_lapses <- sum(study$in_force * q[k, 2])
+  data.frame(
+    decrement = c("Death", "Lapse"),
+    actual    = c(sum(study$deaths), sum(study$lapses)),
+    expected  = c(exp_deaths, exp_lapses),
+    ae_ratio  = c(sum(study$deaths) / exp_deaths, sum(study$lapses) / exp_lapses)
+  )
 }

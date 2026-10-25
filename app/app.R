@@ -10,12 +10,15 @@ source(find_file("r", "experience.R"))
 source(find_file("r", "decrement.R"))
 source(find_file("r", "multilife.R"))
 
-# If the experience database exists, estimate intensities from it
-est <- NULL
+# Load experience data from SQLite, if the database has been built
+est <- NULL     # Chapter 1: estimated intensities
+study <- NULL   # Chapter 2: exit study by policy year
 db_path <- find_file("sql", "experience.sqlite")
 if (!is.na(db_path)) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  est <- estimate_intensities(query_experience(con), 3)
+  tabs <- DBI::dbListTables(con)
+  if ("spell" %in% tabs)  est <- estimate_intensities(query_experience(con), 3)
+  if ("policy" %in% tabs) study <- estimate_decrement_rates(query_exit_study(con))
   DBI::dbDisconnect(con)
 }
 
@@ -91,6 +94,14 @@ tab_lapse <- tabPanel("Chapter 2: Exits",
                           tableOutput("dl_results"),
                           h3("What happens to 1,000 policies"),
                           plotOutput("dl_plot", height = "350px"),
+                          if (!is.null(study)) tagList(
+                            h3("Experience study (SQLite): actual vs expected"),
+                            p(em("50,000 simulated policies, counted by policy year in SQL, compared with the
+              assumptions currently set on the sliders. An A/E ratio near 100% means the
+              assumption fits the data.")),
+                            tableOutput("dl_ae"),
+                            plotOutput("dl_study_plot", height = "300px")
+                          ),
                           p(em("Death and lapse rates are entered as independent (single decrement) rates and
             converted to dependent rates assuming a uniform distribution of each decrement
             within the year. Premiums are paid at the start of each year while in force.
@@ -239,6 +250,36 @@ server <- function(input, output, session) {
     legend("right", legend = c("Still in force", "Cumulative deaths", "Cumulative lapses"),
            col = c("#2a9d8f", "#e76f51", "#457b9d"), lty = 1, lwd = 2)
   })
+  
+  if (!is.null(study)) {
+    # Only compare the policy years covered by both the study and the slider term
+    study_in_term <- reactive(study[study$policy_year <= input$dl_n, ])
+    
+    output$dl_ae <- renderTable({
+      ae <- actual_vs_expected(study_in_term(), dl()$q)
+      data.frame(
+        Decrement = ae$decrement,
+        Actual = formatC(ae$actual, format = "d", big.mark = ","),
+        Expected = formatC(ae$expected, format = "f", digits = 0, big.mark = ","),
+        `A/E` = sprintf("%.1f%%", 100 * ae$ae_ratio),
+        check.names = FALSE
+      )
+    })
+    
+    output$dl_study_plot <- renderPlot({
+      s <- study_in_term()
+      q <- dl()$q
+      k <- s$policy_year
+      plot(k, s$q_lapse, pch = 19, col = "#457b9d",
+           ylim = c(0, max(c(s$q_lapse + 2 * s$se_lapse, q[k, 2])) * 1.1),
+           xlab = "Policy year", ylab = "Lapse rate (dependent)")
+      arrows(k, s$q_lapse - 1.96 * s$se_lapse, k, s$q_lapse + 1.96 * s$se_lapse,
+             angle = 90, code = 3, length = 0.03, col = "#457b9d")
+      lines(k, q[k, 2], lwd = 2, col = "#e76f51")
+      legend("topright", legend = c("Observed in SQL data (95% interval)", "Assumption on sliders"),
+             col = c("#457b9d", "#e76f51"), pch = c(19, NA), lty = c(NA, 1), lwd = c(NA, 2))
+    })
+  }
   
   # ----- Chapter 3 -----
   tl <- reactive({
