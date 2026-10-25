@@ -158,7 +158,7 @@ $$
 with approximate variance
 
 $$
-\operatorname{Var}\big(\hat{\mu}^{ij}\big) \approx \frac{D^{ij}}{\big(T^{i}\big)^2}
+\text{Var}\big(\hat{\mu}^{ij}\big) \approx \frac{D^{ij}}{\big(T^{i}\big)^2}
 $$
 
 The two SQL queries in `sql/` produce exactly the inputs to this formula: `transitions.sql` counts each type of transition, and `exposure.sql` sums the time spent in each state.
