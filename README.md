@@ -25,7 +25,7 @@ This project prices those odds. Each chapter takes one way a life can unfold and
 | 1 | **Detours** | Life doesn't go in a straight line | Multiple state models (healthy, disabled, dead) | Done |
 | 2 | **Exits** | Everyone leaves eventually, but how? | Multiple decrement models (death, lapse) | Done |
 | 3 | **Two Lives** | A promise made to a couple | Multiple life models (joint life, last survivor) | Done |
-| 4 | **The Long Wait** | Decades of saving for the years after work | Pension mathematics | Next |
+| 4 | **The Long Wait** | Decades of saving for the years after work | Pension Mathematics | Next |
 | 5 | **The Reckoning** | Did the promise pay off for the insurer? | Profit testing and analysis of surplus | Planned |
 | 6 | **Room to Move** | A promise that bends | Universal life | Planned |
 | 7 | **The Fine Print** | Guarantees that cost more than they look | Embedded options | Planned |
@@ -60,7 +60,7 @@ flowchart LR
 - **Annuities and insurances by state**: payments while in a state, or on entry into a state
 - **Premiums** by the equivalence principle
 
-### The mathematics
+### The Mathematics
 
 Notation follows Dickson, Hardy and Waters, *Actuarial Mathematics for Life Contingent Risks*.
 
@@ -151,7 +151,7 @@ The calculator can load these estimates with one click.
 - **Constant forces of decrement**
 - **Benefits that depend on the cause of exit**, annuities and premiums
 
-### The mathematics
+### The Mathematics
 
 Total exit probability, and the probability of staying in force for $k$ years:
 
@@ -234,7 +234,7 @@ A multiple decrement model is a multiple state model with one starting state. A 
 - **Expected time to first and last death** under constant forces
 - **Makeham mortality** with the parameters of the SOA Standard Ultimate Life Table
 
-### The mathematics
+### The Mathematics
 
 For independent lives, the joint-life status survives while both are alive, and the last-survivor status while at least one is:
 
