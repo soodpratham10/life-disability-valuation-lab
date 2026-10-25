@@ -208,7 +208,7 @@ A multiple decrement model is a multiple state model with one starting state. A 
 For independent lives, the joint-life status survives while both are alive, and the last-survivor status while at least one is:
 
 $$
-{}_kp_{xy} = {}_kp_x\,{}_kp_y,
+{}_kp_{xy} = {}_kp_x \cdot {}_kp_y,
 \qquad
 {}_kp_{\overline{xy}} = {}_kp_x + {}_kp_y - {}_kp_{xy}
 $$
@@ -228,13 +228,13 @@ $$
 A joint and survivor pension pays $A$ while both are alive and a share $s$ of it to the survivor:
 
 $$
-\text{EPV} = A\big(s\,\ddot{a}_{\overline{xy}} + (1-s)\,\ddot{a}_{xy}\big)
+\text{EPV} = A\big(s \ddot{a}_{\overline{xy}} + (1-s) \ddot{a}_{xy}\big)
 $$
 
 The probability that $(x)$ dies before $(y)$ within $n$ years, with deaths uniformly distributed over each year of age:
 
 $$
-{}_nq_{\overset{1}{x}y} = \sum_{k=0}^{n-1} {}_kp_{xy}\; q_{x+k}\Big(1 - \tfrac{1}{2}q_{y+k}\Big)
+{}_nq_{\overset{1}{x}y} = \sum_{k=0}^{n-1} {}_kp_{xy} q_{x+k}\Big(1 - \tfrac{1}{2}q_{y+k}\Big)
 $$
 
 Mortality follows Makeham's law, $\mu_x = A + Bc^x$, with $A = 0.00022$, $B = 2.7 \times 10^{-6}$ and $c = 1.124$.
