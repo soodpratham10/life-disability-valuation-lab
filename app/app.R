@@ -7,6 +7,7 @@ find_file <- function(...) {
 }
 source(find_file("r", "multistate.R"))
 source(find_file("r", "experience.R"))
+source(find_file("r", "decrement.R"))
 
 # If the experience database exists, estimate intensities from it
 est <- NULL
@@ -17,48 +18,91 @@ if (!is.na(db_path)) {
   DBI::dbDisconnect(con)
 }
 
+money <- function(x) paste0("$", formatC(x, format = "f", big.mark = ",", digits = 2))
+note <- p(em("Illustrative assumptions only. Not calibrated to real data and not a pricing basis."))
+
+# ---------- Tab 1: Disability & Death (multiple state model) ----------
+tab_disability <- tabPanel("Disability & Death",
+                           sidebarLayout(
+                             sidebarPanel(
+                               h4("Transition intensities (per year)"),
+                               sliderInput("mu01", "Healthy to disabled", min = 0, max = 0.30,
+                                           value = 0.02, step = 0.001),
+                               sliderInput("mu02", "Death while healthy", min = 0, max = 0.10,
+                                           value = 0.01, step = 0.001),
+                               sliderInput("mu12", "Death while disabled", min = 0, max = 0.30,
+                                           value = 0.05, step = 0.001),
+                               if (!is.null(est)) actionButton("use_est",
+                                                               "Use intensities estimated from experience data"),
+                               h4("Economics and term"),
+                               sliderInput("delta", "Force of interest", min = 0, max = 0.10,
+                                           value = 0.05, step = 0.005),
+                               sliderInput("n", "Policy term (years)", min = 5, max = 40,
+                                           value = 20, step = 1),
+                               h4("Benefits"),
+                               numericInput("di", "Disability benefit (per year while disabled)",
+                                            value = 12000, min = 0, step = 1000),
+                               numericInput("db", "Death benefit (paid on death)",
+                                            value = 50000, min = 0, step = 5000)
+                             ),
+                             mainPanel(
+                               h3("Results"),
+                               tableOutput("results"),
+                               h3("Where a healthy policyholder is over time"),
+                               plotOutput("probs", height = "350px"),
+                               if (!is.null(est)) tagList(
+                                 h3("Intensities estimated from experience data (SQLite)"),
+                                 tableOutput("est_table")
+                               ),
+                               p(em("Premiums are paid continuously while healthy and set by the equivalence principle.")),
+                               note
+                             )
+                           )
+)
+
+# ---------- Tab 2: Death & Lapse (multiple decrement model) ----------
+tab_lapse <- tabPanel("Death & Lapse",
+                      sidebarLayout(
+                        sidebarPanel(
+                          h4("Term insurance"),
+                          sliderInput("dl_n", "Policy term (years)", min = 5, max = 30, value = 20, step = 1),
+                          numericInput("dl_b", "Death benefit (paid at end of year of death)",
+                                       value = 250000, min = 0, step = 10000),
+                          sliderInput("dl_i", "Annual interest rate", min = 0, max = 0.10,
+                                      value = 0.05, step = 0.005),
+                          h4("Mortality (independent rate)"),
+                          sliderInput("dl_q0", "Year 1 death rate", min = 0.0005, max = 0.02,
+                                      value = 0.002, step = 0.0005),
+                          sliderInput("dl_g", "Annual increase in death rate", min = 0, max = 0.12,
+                                      value = 0.08, step = 0.005),
+                          h4("Lapses (independent rate)"),
+                          sliderInput("dl_l1", "Year 1 lapse rate", min = 0, max = 0.30,
+                                      value = 0.10, step = 0.01),
+                          sliderInput("dl_lu", "Lapse rate after year 1", min = 0, max = 0.15,
+                                      value = 0.05, step = 0.005)
+                        ),
+                        mainPanel(
+                          h3("Results"),
+                          tableOutput("dl_results"),
+                          h3("What happens to 1,000 policies"),
+                          plotOutput("dl_plot", height = "350px"),
+                          p(em("Death and lapse rates are entered as independent (single decrement) rates and
+            converted to dependent rates assuming a uniform distribution of each decrement
+            within the year. Premiums are paid at the start of each year while in force.
+            No cash value is paid on lapse.")),
+                          note
+                        )
+                      )
+)
+
 ui <- fluidPage(
-  titlePanel("Disability & Death Policy Calculator"),
-  sidebarLayout(
-    sidebarPanel(
-      h4("Transition intensities (per year)"),
-      sliderInput("mu01", "Healthy to disabled", min = 0, max = 0.30,
-                  value = 0.02, step = 0.001),
-      sliderInput("mu02", "Death while healthy", min = 0, max = 0.10,
-                  value = 0.01, step = 0.001),
-      sliderInput("mu12", "Death while disabled", min = 0, max = 0.30,
-                  value = 0.05, step = 0.001),
-      if (!is.null(est)) actionButton("use_est",
-                                      "Use intensities estimated from experience data"),
-      h4("Economics and term"),
-      sliderInput("delta", "Force of interest", min = 0, max = 0.10,
-                  value = 0.05, step = 0.005),
-      sliderInput("n", "Policy term (years)", min = 5, max = 40,
-                  value = 20, step = 1),
-      h4("Benefits"),
-      numericInput("di", "Disability benefit (per year while disabled)",
-                   value = 12000, min = 0, step = 1000),
-      numericInput("db", "Death benefit (paid on death)",
-                   value = 50000, min = 0, step = 5000)
-    ),
-    mainPanel(
-      h3("Results"),
-      tableOutput("results"),
-      h3("Where a healthy policyholder is over time"),
-      plotOutput("probs", height = "350px"),
-      if (!is.null(est)) tagList(
-        h3("Intensities estimated from experience data (SQLite)"),
-        tableOutput("est_table")
-      ),
-      p(em("Illustrative assumptions only. The intensities are not calibrated
-            to real data and this is not a pricing basis. Premiums are paid
-            continuously while healthy and set by the equivalence principle."))
-    )
-  )
+  titlePanel("Actuarial Models Lab: Policy Calculator"),
+  tabsetPanel(tab_disability, tab_lapse)
 )
 
 server <- function(input, output, session) {
   
+  # ----- Tab 1 -----
   calc <- reactive({
     mu <- matrix(c(0, input$mu01, input$mu02,
                    0, 0,          input$mu12,
@@ -71,8 +115,6 @@ server <- function(input, output, session) {
                                    premium_states = 1, n = n, delta = delta)
     list(mu = mu, epv_di = epv_di, epv_db = epv_db, premium = premium)
   })
-  
-  money <- function(x) paste0("$", formatC(x, format = "f", big.mark = ",", digits = 2))
   
   output$results <- renderTable({
     r <- calc()
@@ -117,6 +159,50 @@ server <- function(input, output, session) {
       updateSliderInput(session, "mu12", value = round(est$mu[2, 3], 3))
     })
   }
+  
+  # ----- Tab 2 -----
+  dl <- reactive({
+    n <- input$dl_n
+    k <- 0:(n - 1)
+    qd <- pmin(input$dl_q0 * (1 + input$dl_g)^k, 1)          # independent death rates
+    qw <- ifelse(k == 0, input$dl_l1, input$dl_lu)            # independent lapse rates
+    q <- udd_single_to_multiple(cbind(qd, qw))                # dependent rates
+    q_no_lapse <- cbind(qd, 0)
+    b <- c(input$dl_b, 0)
+    list(q = q,
+         prem = md_premium(q, b, input$dl_i),
+         prem_no_lapse = md_premium(q_no_lapse, b, input$dl_i),
+         epv = md_epv_benefits(q, b, input$dl_i),
+         ann = md_annuity_due(q, input$dl_i))
+  })
+  
+  output$dl_results <- renderTable({
+    r <- dl()
+    change <- (r$prem - r$prem_no_lapse) / r$prem_no_lapse
+    data.frame(
+      Item = c("Annual premium allowing for lapses",
+               "Annual premium if nobody lapses",
+               "Effect of lapses on the premium",
+               "EPV of death benefit (with lapses)",
+               "Annuity factor (with lapses)"),
+      Value = c(money(r$prem), money(r$prem_no_lapse),
+                sprintf("%+.1f%%", 100 * change),
+                money(r$epv), sprintf("%.4f", r$ann))
+    )
+  })
+  
+  output$dl_plot <- renderPlot({
+    tab <- decrement_table(dl()$q, radix = 1000)
+    yrs <- 0:input$dl_n
+    lines <- cbind(tab$l,
+                   c(0, cumsum(tab$d[, 1])),
+                   c(0, cumsum(tab$d[, 2])))
+    matplot(yrs, lines, type = "l", lty = 1, lwd = 2,
+            col = c("#2a9d8f", "#e76f51", "#457b9d"), ylim = c(0, 1000),
+            xlab = "Policy year", ylab = "Number of policies (out of 1,000)")
+    legend("right", legend = c("Still in force", "Cumulative deaths", "Cumulative lapses"),
+           col = c("#2a9d8f", "#e76f51", "#457b9d"), lty = 1, lwd = 2)
+  })
 }
 
 shinyApp(ui, server)
